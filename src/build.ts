@@ -139,7 +139,10 @@ async function buildExternal(ctx: FixtureContext, fixture: Fixture, key: string)
   if (out.authFailed) ctx.shared.authFailed = true;
   const checks = { ...out.checks };
   if (out.status === 'produced') checks.within_turnaround = Date.now() - t0 <= turnaroundMs;
-  const result = done({ status: out.status, url: out.url, checks, failure_reason: out.failure_reason, notes: out.notes });
+  const result = done({
+    status: out.status, url: out.url, checks, failure_reason: out.failure_reason, notes: out.notes,
+    artifact_may_exist: out.artifactMayExist,
+  });
 
   // Anything past a 2xx may have created a real artifact: record it so a retry with the same key never re-POSTs.
   if (out.artifactMayExist) {

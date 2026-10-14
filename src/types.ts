@@ -100,6 +100,8 @@ export interface FixtureResult {
   failure_reason: string | null;
   notes: string[];
   cached?: boolean;
+  // external only: the client tool answered 2xx, so a real artifact may exist there (never re-POST blindly)
+  artifact_may_exist?: boolean;
 }
 
 export interface BuildResponse {

@@ -1,7 +1,7 @@
 # Magnet service skill bundle — ships WITH the Render service (2026-10-07)
 
-These files are the Lead Magnet service's own knowledge. The service has no GTMA database
-access and no memory: per request it receives the payload (docs/magnet-service-contract.md)
+These files are the Lead Magnet service's own knowledge. The service reads the Postgres database (scoped role) and writes exactly ONE table,
+magnet_productions, to log its own runs (ruling 52): per request it receives the payload (docs/magnet-service-contract.md)
 and executes the payload's `recipe.skill_md` AGAINST these bundled skills. Split of brains:
 
 | Side | Skills | Job |

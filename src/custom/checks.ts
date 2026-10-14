@@ -66,7 +66,10 @@ export function runCustomChecks({ html, content, payload, fixture, resolved, log
   const companyName = (fixture.company as Record<string, unknown>)?.company_name as string | undefined ?? '';
   const notes: string[] = [];
 
-  const untraced = untracedNumbers(content, {
+  // Scanned from the rendered text, not the raw content object: the object also carries fields
+  // that never reach the page (e.g. proofpoint_indexes, the LLM's internal selection of which
+  // proofpoints to show) and those aren't page claims, so they'd otherwise false-positive here.
+  const untraced = untracedNumbers(text, {
     fixture,
     client: payload.client,
     play_constants: payload.recipe.play_constants,

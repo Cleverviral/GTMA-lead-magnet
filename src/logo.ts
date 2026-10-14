@@ -42,14 +42,14 @@ function isPublicUrl(url: string): boolean {
   return !/(^localhost$|\.local$|\.internal$|\.localhost$)/i.test(host) && host.includes('.');
 }
 
-interface FetchedBytes {
+export interface FetchedBytes {
   status: number;
   ctype: string;
   data: Buffer;
   finalUrl: string;
 }
 
-async function get(url: string, limit = MAX_BYTES + 1, timeoutMs = 15000): Promise<FetchedBytes> {
+export async function getPublic(url: string, limit = MAX_BYTES + 1, timeoutMs = 15000): Promise<FetchedBytes> {
   let current = url;
   for (let hop = 0; hop < 6; hop++) {
     if (!isPublicUrl(current)) throw new Error('blocked url');
@@ -202,7 +202,7 @@ type TriedResult = (ValidationResult & { url: string }) | null;
 async function tryUrl(url: string, tried: string[]): Promise<TriedResult> {
   let res: FetchedBytes;
   try {
-    res = await get(url);
+    res = await getPublic(url);
   } catch (e) {
     tried.push(`download failed (${e instanceof Error ? e.message : String(e)})`);
     return null;
@@ -235,7 +235,7 @@ interface FetchLogoResult {
 export async function fetchLogo(domain: string): Promise<FetchLogoResult> {
   const tried: string[] = [];
   try {
-    const home = await get(`https://${domain}/`, 3_000_000);
+    const home = await getPublic(`https://${domain}/`, 3_000_000);
     const html = home.data.toString('utf8');
     for (const url of candidates(html, home.finalUrl)) {
       const hit = await tryUrl(url, tried);

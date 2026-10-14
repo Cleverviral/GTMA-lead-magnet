@@ -38,8 +38,19 @@ const Fixture = z
     full_name: z.string().nullish(),
     company: anyRecord.default({}),
     inputs: anyRecord.default({}),
+    // manifest keys that could not be obtained: their sections are omitted or reshaped, never invented
+    unavailable_inputs: z.array(z.string()).default([]),
   })
   .passthrough();
+
+// The autoresponder's whole request at reply time: a lead reference, nothing else.
+export const ReplyRequest = z.object({
+  sequencer: z.string().min(1),
+  sequencer_campaign_id: id,
+  sequencer_lead_id: id,
+  reply_id: id.nullish(),
+  idempotency_key: z.string().min(1).nullish(),
+});
 
 export const BuildPayload = z
   .object({

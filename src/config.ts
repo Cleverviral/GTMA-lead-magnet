@@ -17,7 +17,10 @@ export const config = {
   port,
   host: process.env.HOST || '0.0.0.0',
   databaseUrl: required('DATABASE_URL'),
+  // GTMA's own database: read for the reply-time lookup chain, written only in magnet_productions.
+  gtmaDatabaseUrl: required('GTMA_DATABASE_URL'),
   serviceApiKey: required('SERVICE_API_KEY'),
+  generatorVersion: `magnet_service@${process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'local'}`,
   publicBaseUrl,
   openaiApiKey: required('OPENAI_API_KEY'),
   model: process.env.MAGNET_MODEL || 'gpt-5.5',

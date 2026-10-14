@@ -12,6 +12,10 @@ services:
         value: 22
       - key: DATABASE_URL
         sync: false
+      - key: GTMA_DATABASE_URL
+        sync: false
+      - key: BLITZ_API_KEY
+        sync: false
       - key: SERVICE_API_KEY
         sync: false
       - key: OPENAI_API_KEY

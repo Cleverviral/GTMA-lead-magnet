@@ -1,0 +1,897 @@
+{
+ "lead_magnet_id": "b410812e-2ed8-429e-8396-6ccfded59c79",
+ "runtime_id": "<draft runtime uuid>",
+ "runtime_version": 1,
+ "gtm_play_id": "15081b51-ece2-4be0-862c-ecf054c93ba1",
+ "idempotency_key": "<uuid per build attempt>",
+ "recipe": {
+  "skill_md": "<injected from fixtures/example-recipe-custom.md>",
+  "play_constants": {},
+  "output_contract": {
+   "deliverable": "html_link",
+   "pre_send_checks": [
+    "url_resolves",
+    "no_placeholders"
+   ],
+   "expected_turnaround_minutes": 10
+  }
+ },
+ "magnet": {
+  "kind": "custom",
+  "promise": [
+   "A map of the people-growth signals your team could track for better sales or recruiting triggers."
+  ],
+  "description": "A concise map of people-growth and hiring-signal opportunities...",
+  "hosting": "ours",
+  "hosted_base_url": null,
+  "integration": null
+ },
+ "client": {
+  "client_name": "Data Magnet",
+  "website": "https://www.datamagnet.co/",
+  "brand_colors": {
+   "accent": "#16a34a",
+   "accent2": "#22c55e",
+   "ink": "#111827",
+   "mut": "#64748b",
+   "line": "#e2e8f0",
+   "bg": "#f8fafc"
+  },
+  "logo_url": null,
+  "booking_url": "https://cal.com/datamagnet/15min",
+  "booking_poc_name": "Mayank"
+ },
+ "proofpoints": [],
+ "fixtures": [
+  {
+   "person_id": "622ca757-176c-4be9-ae9c-ec411bc04a0e",
+   "lead_list_id": "70",
+   "reply_id": null,
+   "first_name": "Ryan",
+   "full_name": "Ryan J.",
+   "company": {
+    "company_name": "DataStax",
+    "primary_domain": "datastax.com",
+    "industry": "IT System Data Services",
+    "employee_count": 375,
+    "hq_city": "Santa Clara",
+    "hq_country": "US",
+    "about": "Providing an AI Platform as a Service that makes it possible for developers to build GenAI applications that match the scale of their ambition."
+   },
+   "inputs": {
+    "company_dept_distribution": {
+     "distribution": [
+      {
+       "count": 107,
+       "department": "Information Technology",
+       "percentage_ratio": 38.63
+      },
+      {
+       "count": 35,
+       "department": "General Business & Management",
+       "percentage_ratio": 12.64
+      },
+      {
+       "count": 28,
+       "department": "Engineering",
+       "percentage_ratio": 10.11
+      },
+      {
+       "count": 28,
+       "department": "Other",
+       "percentage_ratio": 10.11
+      },
+      {
+       "count": 25,
+       "department": "Sales & Business Development",
+       "percentage_ratio": 9.03
+      },
+      {
+       "count": 11,
+       "department": "Advertising & Marketing",
+       "percentage_ratio": 3.97
+      },
+      {
+       "count": 9,
+       "department": "Operations",
+       "percentage_ratio": 3.25
+      },
+      {
+       "count": 7,
+       "department": "Human Resources",
+       "percentage_ratio": 2.53
+      },
+      {
+       "count": 6,
+       "department": "Finance & Accounting",
+       "percentage_ratio": 2.17
+      },
+      {
+       "count": 5,
+       "department": "Art, Culture and Creative Professionals",
+       "percentage_ratio": 1.81
+      },
+      {
+       "count": 5,
+       "department": "Writing/Editing",
+       "percentage_ratio": 1.81
+      },
+      {
+       "count": 4,
+       "department": "Public Administration & Safety",
+       "percentage_ratio": 1.44
+      },
+      {
+       "count": 3,
+       "department": "Legal",
+       "percentage_ratio": 1.08
+      },
+      {
+       "count": 2,
+       "department": "Manufacturing & Production",
+       "percentage_ratio": 0.72
+      },
+      {
+       "count": 1,
+       "department": "Customer/Client Service",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "department": "Healthcare & Human Services",
+       "percentage_ratio": 0.36
+      }
+     ],
+     "total_employees": 277
+    },
+    "company_country_distribution": {
+     "distribution": [
+      {
+       "count": 169,
+       "country": "US",
+       "percentage_ratio": 61.01
+      },
+      {
+       "count": 23,
+       "country": "GB",
+       "percentage_ratio": 8.3
+      },
+      {
+       "count": 22,
+       "country": "unknown",
+       "percentage_ratio": 7.94
+      },
+      {
+       "count": 13,
+       "country": "IN",
+       "percentage_ratio": 4.69
+      },
+      {
+       "count": 7,
+       "country": "CA",
+       "percentage_ratio": 2.53
+      },
+      {
+       "count": 7,
+       "country": "FR",
+       "percentage_ratio": 2.53
+      },
+      {
+       "count": 6,
+       "country": "AU",
+       "percentage_ratio": 2.17
+      },
+      {
+       "count": 4,
+       "country": "SG",
+       "percentage_ratio": 1.44
+      },
+      {
+       "count": 3,
+       "country": "BD",
+       "percentage_ratio": 1.08
+      },
+      {
+       "count": 3,
+       "country": "BG",
+       "percentage_ratio": 1.08
+      },
+      {
+       "count": 3,
+       "country": "BR",
+       "percentage_ratio": 1.08
+      },
+      {
+       "count": 3,
+       "country": "DE",
+       "percentage_ratio": 1.08
+      },
+      {
+       "count": 2,
+       "country": "ES",
+       "percentage_ratio": 0.72
+      },
+      {
+       "count": 2,
+       "country": "PK",
+       "percentage_ratio": 0.72
+      },
+      {
+       "count": 2,
+       "country": "PL",
+       "percentage_ratio": 0.72
+      },
+      {
+       "count": 1,
+       "country": "AR",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "EG",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "IE",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "IL",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "IT",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "MX",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "UA",
+       "percentage_ratio": 0.36
+      },
+      {
+       "count": 1,
+       "country": "UZ",
+       "percentage_ratio": 0.36
+      }
+     ],
+     "total_employees": 277
+    }
+   }
+  },
+  {
+   "person_id": "9d62d61c-3b36-44fd-8620-b1917ce96323",
+   "lead_list_id": "113",
+   "reply_id": null,
+   "first_name": "Lindsay",
+   "full_name": "Lindsay Warne",
+   "company": {
+    "company_name": "Worldly",
+    "primary_domain": "worldly.io",
+    "industry": "Data Infrastructure and Analytics",
+    "employee_count": 209,
+    "hq_city": "Concord",
+    "hq_country": "US",
+    "about": "Worldly is the leading sustainability and supply chain intelligence platform for the consumer goods industry. The company empowers brands, retailers, and manufacturers to turn verified primary data into insight and action across complex global supply chains.\n\nTrusted by a network of more than 45,000 companies across apparel, footwear, home furnishings, and sporting goods, Worldly provides visibility into environmental and social performance, including carbon, water, chemicals, and labor, at the product, facility, and value-chain levels.\n\nBuilt on industry-recognized standards, including Cascale’s Higg Index, Worldly translates raw data into actionable intelligence that helps organizations reduce risk, meet evolving regulatory requirements, and drive measurable progress over time."
+   },
+   "inputs": {
+    "company_dept_distribution": {
+     "distribution": [
+      {
+       "count": 45,
+       "department": "Information Technology",
+       "percentage_ratio": 30.41
+      },
+      {
+       "count": 37,
+       "department": "General Business & Management",
+       "percentage_ratio": 25
+      },
+      {
+       "count": 25,
+       "department": "Customer/Client Service",
+       "percentage_ratio": 16.89
+      },
+      {
+       "count": 11,
+       "department": "Sales & Business Development",
+       "percentage_ratio": 7.43
+      },
+      {
+       "count": 9,
+       "department": "Advertising & Marketing",
+       "percentage_ratio": 6.08
+      },
+      {
+       "count": 6,
+       "department": "Finance & Accounting",
+       "percentage_ratio": 4.05
+      },
+      {
+       "count": 5,
+       "department": "Operations",
+       "percentage_ratio": 3.38
+      },
+      {
+       "count": 4,
+       "department": "Human Resources",
+       "percentage_ratio": 2.7
+      },
+      {
+       "count": 2,
+       "department": "Manufacturing & Production",
+       "percentage_ratio": 1.35
+      },
+      {
+       "count": 1,
+       "department": "Art, Culture and Creative Professionals",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "department": "Education",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "department": "Legal",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "department": "Writing/Editing",
+       "percentage_ratio": 0.68
+      }
+     ],
+     "total_employees": 148
+    },
+    "company_country_distribution": {
+     "distribution": [
+      {
+       "count": 90,
+       "country": "US",
+       "percentage_ratio": 60.81
+      },
+      {
+       "count": 11,
+       "country": "unknown",
+       "percentage_ratio": 7.43
+      },
+      {
+       "count": 9,
+       "country": "GB",
+       "percentage_ratio": 6.08
+      },
+      {
+       "count": 5,
+       "country": "BR",
+       "percentage_ratio": 3.38
+      },
+      {
+       "count": 5,
+       "country": "DE",
+       "percentage_ratio": 3.38
+      },
+      {
+       "count": 5,
+       "country": "RS",
+       "percentage_ratio": 3.38
+      },
+      {
+       "count": 3,
+       "country": "HK",
+       "percentage_ratio": 2.03
+      },
+      {
+       "count": 3,
+       "country": "PH",
+       "percentage_ratio": 2.03
+      },
+      {
+       "count": 2,
+       "country": "CA",
+       "percentage_ratio": 1.35
+      },
+      {
+       "count": 2,
+       "country": "FR",
+       "percentage_ratio": 1.35
+      },
+      {
+       "count": 2,
+       "country": "MK",
+       "percentage_ratio": 1.35
+      },
+      {
+       "count": 2,
+       "country": "VN",
+       "percentage_ratio": 1.35
+      },
+      {
+       "count": 1,
+       "country": "AR",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "BA",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "BO",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "CO",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "ES",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "IE",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "PE",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "PT",
+       "percentage_ratio": 0.68
+      },
+      {
+       "count": 1,
+       "country": "TT",
+       "percentage_ratio": 0.68
+      }
+     ],
+     "total_employees": 148
+    }
+   }
+  },
+  {
+   "person_id": "94ba4ae3-4733-4288-9a80-d2c24ba562bf",
+   "lead_list_id": "28",
+   "reply_id": null,
+   "first_name": "Jonquil",
+   "full_name": "Jonquil Moore",
+   "company": {
+    "company_name": "Datassential",
+    "primary_domain": "datassential.com",
+    "industry": "Information Services",
+    "employee_count": 223,
+    "hq_city": "Chicago",
+    "hq_country": "US",
+    "about": "Datassential is the leading food and beverage intelligence platform providing guidance on trends, competitive benchmarking, and sales intelligence. Through a suite of AI-powered solutions, an intuitive UI, and proprietary data, the food and beverage ecosystem relies on Datassential to more effectively develop, market, and sell their products. Founded in 2001, Datassential powers insights and sales intelligence for brands including Burger King, DoorDash, General Mills, Land O’ Lakes, Pepsi, Starbucks, Target, and more.\n\nAt Datassential we celebrate foodies from all over the world and create a welcoming culture where people research, study, and learn about food trends. We’re committed to being the best in the industry and that means celebrating various perspectives and experiences, learning from each other, and passing on that knowledge to our clients. Food brings people together, and there’s room for everyone at Datassential’s table. "
+   },
+   "inputs": {
+    "company_dept_distribution": {
+     "distribution": [
+      {
+       "count": 47,
+       "department": "General Business & Management",
+       "percentage_ratio": 24.87
+      },
+      {
+       "count": 40,
+       "department": "Sales & Business Development",
+       "percentage_ratio": 21.16
+      },
+      {
+       "count": 26,
+       "department": "Information Technology",
+       "percentage_ratio": 13.76
+      },
+      {
+       "count": 16,
+       "department": "Customer/Client Service",
+       "percentage_ratio": 8.47
+      },
+      {
+       "count": 15,
+       "department": "Other",
+       "percentage_ratio": 7.94
+      },
+      {
+       "count": 10,
+       "department": "Advertising & Marketing",
+       "percentage_ratio": 5.29
+      },
+      {
+       "count": 10,
+       "department": "Operations",
+       "percentage_ratio": 5.29
+      },
+      {
+       "count": 6,
+       "department": "Finance & Accounting",
+       "percentage_ratio": 3.17
+      },
+      {
+       "count": 6,
+       "department": "Research & Development",
+       "percentage_ratio": 3.17
+      },
+      {
+       "count": 4,
+       "department": "Engineering",
+       "percentage_ratio": 2.12
+      },
+      {
+       "count": 4,
+       "department": "Human Resources",
+       "percentage_ratio": 2.12
+      },
+      {
+       "count": 2,
+       "department": "Writing/Editing",
+       "percentage_ratio": 1.06
+      },
+      {
+       "count": 1,
+       "department": "Art, Culture and Creative Professionals",
+       "percentage_ratio": 0.53
+      },
+      {
+       "count": 1,
+       "department": "Education",
+       "percentage_ratio": 0.53
+      },
+      {
+       "count": 1,
+       "department": "Manufacturing & Production",
+       "percentage_ratio": 0.53
+      }
+     ],
+     "total_employees": 189
+    },
+    "company_country_distribution": {
+     "distribution": [
+      {
+       "count": 147,
+       "country": "US",
+       "percentage_ratio": 77.78
+      },
+      {
+       "count": 12,
+       "country": "CA",
+       "percentage_ratio": 6.35
+      },
+      {
+       "count": 12,
+       "country": "unknown",
+       "percentage_ratio": 6.35
+      },
+      {
+       "count": 5,
+       "country": "FR",
+       "percentage_ratio": 2.65
+      },
+      {
+       "count": 5,
+       "country": "GB",
+       "percentage_ratio": 2.65
+      },
+      {
+       "count": 2,
+       "country": "IN",
+       "percentage_ratio": 1.06
+      },
+      {
+       "count": 2,
+       "country": "PK",
+       "percentage_ratio": 1.06
+      },
+      {
+       "count": 1,
+       "country": "BG",
+       "percentage_ratio": 0.53
+      },
+      {
+       "count": 1,
+       "country": "BR",
+       "percentage_ratio": 0.53
+      },
+      {
+       "count": 1,
+       "country": "HN",
+       "percentage_ratio": 0.53
+      },
+      {
+       "count": 1,
+       "country": "UA",
+       "percentage_ratio": 0.53
+      }
+     ],
+     "total_employees": 189
+    }
+   }
+  },
+  {
+   "person_id": "da1d1c42-8236-434d-846b-87808d24560e",
+   "lead_list_id": "86",
+   "reply_id": null,
+   "first_name": "John",
+   "full_name": "John Honovich",
+   "company": {
+    "company_name": "IPVM",
+    "primary_domain": "ipvm.com",
+    "industry": "Information Services",
+    "employee_count": 52,
+    "hq_city": "Bethlehem",
+    "hq_country": "US",
+    "about": "IPVM is the world's leading authority on physical security technology covering video surveillance, access control, weapons detection and more; delivering unmatched reporting, research, and test results. Dedicated to independent and objective information, we uniquely refuse any and all advertisement, sponsorship and consulting from manufacturers. We provide the best physical security analysis, testing and training for thousands of subscribers globally."
+   },
+   "inputs": {
+    "company_dept_distribution": {
+     "distribution": [
+      {
+       "count": 5,
+       "department": "Research & Development",
+       "percentage_ratio": 17.24
+      },
+      {
+       "count": 4,
+       "department": "General Business & Management",
+       "percentage_ratio": 13.79
+      },
+      {
+       "count": 3,
+       "department": "Art, Culture and Creative Professionals",
+       "percentage_ratio": 10.34
+      },
+      {
+       "count": 3,
+       "department": "Customer/Client Service",
+       "percentage_ratio": 10.34
+      },
+      {
+       "count": 3,
+       "department": "Operations",
+       "percentage_ratio": 10.34
+      },
+      {
+       "count": 3,
+       "department": "Public Administration & Safety",
+       "percentage_ratio": 10.34
+      },
+      {
+       "count": 3,
+       "department": "Writing/Editing",
+       "percentage_ratio": 10.34
+      },
+      {
+       "count": 2,
+       "department": "Sales & Business Development",
+       "percentage_ratio": 6.9
+      },
+      {
+       "count": 1,
+       "department": "Information Technology",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "department": "Manufacturing & Production",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "department": "Other",
+       "percentage_ratio": 3.45
+      }
+     ],
+     "total_employees": 29
+    },
+    "company_country_distribution": {
+     "distribution": [
+      {
+       "count": 15,
+       "country": "US",
+       "percentage_ratio": 51.72
+      },
+      {
+       "count": 2,
+       "country": "AR",
+       "percentage_ratio": 6.9
+      },
+      {
+       "count": 2,
+       "country": "ID",
+       "percentage_ratio": 6.9
+      },
+      {
+       "count": 2,
+       "country": "PH",
+       "percentage_ratio": 6.9
+      },
+      {
+       "count": 1,
+       "country": "BR",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "CA",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "CZ",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "IN",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "NG",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "SV",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "VN",
+       "percentage_ratio": 3.45
+      },
+      {
+       "count": 1,
+       "country": "unknown",
+       "percentage_ratio": 3.45
+      }
+     ],
+     "total_employees": 29
+    }
+   }
+  },
+  {
+   "person_id": "b963dd7e-1c90-40ff-afc8-2c1e1869868a",
+   "lead_list_id": "122",
+   "reply_id": null,
+   "first_name": "Angie",
+   "full_name": "Angie Hersheway",
+   "company": {
+    "company_name": "Millennium Information Services, Inc.",
+    "primary_domain": "millinfo.com",
+    "industry": "Information Services",
+    "employee_count": 172,
+    "hq_city": "Itasca",
+    "hq_country": "US",
+    "about": "Millennium Information Services, Inc. an Xceedance Company is a leading national provider of property inspection and data management services, skilled at designing and employing innovative process management solutions for property and casualty insurance companies. \n\nCombining a suite of powerful, on-demand technology solutions with 25 years experience  of serving top national and regional P&C companies, we are able to consistently reduce our clients’ expenses and improve the effectiveness of their property policy underwriting and information management efforts."
+   },
+   "inputs": {
+    "company_dept_distribution": {
+     "distribution": [
+      {
+       "count": 23,
+       "department": "Operations",
+       "percentage_ratio": 22.55
+      },
+      {
+       "count": 21,
+       "department": "Other",
+       "percentage_ratio": 20.59
+      },
+      {
+       "count": 14,
+       "department": "General Business & Management",
+       "percentage_ratio": 13.73
+      },
+      {
+       "count": 9,
+       "department": "Sales & Business Development",
+       "percentage_ratio": 8.82
+      },
+      {
+       "count": 7,
+       "department": "Human Resources",
+       "percentage_ratio": 6.86
+      },
+      {
+       "count": 7,
+       "department": "Information Technology",
+       "percentage_ratio": 6.86
+      },
+      {
+       "count": 6,
+       "department": "Finance & Accounting",
+       "percentage_ratio": 5.88
+      },
+      {
+       "count": 4,
+       "department": "Manufacturing & Production",
+       "percentage_ratio": 3.92
+      },
+      {
+       "count": 2,
+       "department": "Customer/Client Service",
+       "percentage_ratio": 1.96
+      },
+      {
+       "count": 2,
+       "department": "Writing/Editing",
+       "percentage_ratio": 1.96
+      },
+      {
+       "count": 1,
+       "department": "Advertising & Marketing",
+       "percentage_ratio": 0.98
+      },
+      {
+       "count": 1,
+       "department": "Art, Culture and Creative Professionals",
+       "percentage_ratio": 0.98
+      },
+      {
+       "count": 1,
+       "department": "Construction",
+       "percentage_ratio": 0.98
+      },
+      {
+       "count": 1,
+       "department": "Education",
+       "percentage_ratio": 0.98
+      },
+      {
+       "count": 1,
+       "department": "Engineering",
+       "percentage_ratio": 0.98
+      },
+      {
+       "count": 1,
+       "department": "Healthcare & Human Services",
+       "percentage_ratio": 0.98
+      },
+      {
+       "count": 1,
+       "department": "Research & Development",
+       "percentage_ratio": 0.98
+      }
+     ],
+     "total_employees": 102
+    },
+    "company_country_distribution": {
+     "distribution": [
+      {
+       "count": 93,
+       "country": "US",
+       "percentage_ratio": 91.18
+      },
+      {
+       "count": 7,
+       "country": "unknown",
+       "percentage_ratio": 6.86
+      },
+      {
+       "count": 2,
+       "country": "BR",
+       "percentage_ratio": 1.96
+      }
+     ],
+     "total_employees": 102
+    }
+   }
+  }
+ ]
+}

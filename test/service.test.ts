@@ -8,6 +8,7 @@ import type { PageContent, LogoResult } from '../src/types.js';
 
 // logo.ts pulls in db.ts -> config.ts; the postgres client is lazy, so dummy values are enough.
 process.env.DATABASE_URL ||= 'postgres://u:p@localhost:5432/x';
+process.env.GTMA_DATABASE_URL ||= 'postgres://u:p@localhost:5432/x';
 process.env.SERVICE_API_KEY ||= 'test';
 process.env.OPENAI_API_KEY ||= 'test';
 
@@ -16,9 +17,10 @@ const { noDashes, spellCode } = await import('../src/text.js');
 const { untracedNumbers, runCustomChecks } = await import('../src/custom/checks.js');
 const { renderPage, palette, cta } = await import('../src/custom/render.js');
 const { validate, candidates, normalizeDomain } = await import('../src/logo.js');
-const { BuildPayload } = await import('../src/contract.js');
+const { BuildPayload, ReplyRequest } = await import('../src/contract.js');
+const { toStoredValue, resolveCredential } = await import('../src/reply/vendors.js');
 
-const kit = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'magnet_service_dev_kit');
+const kit = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 const recipe = fs.readFileSync(path.join(kit, 'example-recipe-custom.md'), 'utf8');
 const sample = JSON.parse(fs.readFileSync(path.join(kit, 'sample-payload-build-previews.json'), 'utf8'));
 sample.recipe.skill_md = recipe;
@@ -161,4 +163,24 @@ test('icon candidates prefer apple-touch-icon, then large icons, then the root f
   assert.deepEqual(candidates(html, 'https://acme.com/'), ['https://acme.com/apple.png', 'https://acme.com/big.png', 'https://acme.com/apple-touch-icon.png']);
   assert.equal(normalizeDomain('https://www.Acme.com/about'), 'acme.com');
   assert.equal(normalizeDomain('localhost'), null);
+});
+
+test('a Blitz response is stored without its echo and found flag (same shape GTMA stores)', () => {
+  const res = { found: true, company_linkedin_url: 'https://www.linkedin.com/company/x', total_employees: 189, distribution: [{ department: 'IT', count: 26 }] };
+  assert.deepEqual(toStoredValue(res, ['company_linkedin_url']), { total_employees: 189, distribution: [{ department: 'IT', count: 26 }] });
+  assert.equal(toStoredValue({ found: true, company_linkedin_url: 'x' }, ['company_linkedin_url']), null);
+});
+
+test('the reply request needs only the lead reference', () => {
+  const ok = ReplyRequest.parse({ sequencer: 'email_bison', sequencer_campaign_id: 107, sequencer_lead_id: '103430' });
+  assert.equal(ok.sequencer_campaign_id, '107');
+  assert.equal(ReplyRequest.safeParse({ sequencer: 'email_bison', sequencer_campaign_id: '107' }).success, false);
+});
+
+test('credential pointers resolve to env vars, with or without the ENV: prefix, never to a literal', () => {
+  process.env.TEST_TOOL_KEY = 'secret-123';
+  assert.equal(resolveCredential('TEST_TOOL_KEY'), 'secret-123');
+  assert.equal(resolveCredential('ENV:TEST_TOOL_KEY'), 'secret-123');
+  assert.equal(resolveCredential('ENV:NOT_SET_ANYWHERE'), undefined);
+  assert.equal(resolveCredential(null), undefined);
 });

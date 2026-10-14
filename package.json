@@ -8,7 +8,14 @@
     "dev": "tsx --env-file=.env --watch src/server.ts",
     "test": "tsx --test test/service.test.ts",
     "typecheck": "tsc --noEmit",
-    "sample": "tsx --env-file=.env scripts/send-sample.ts"
+    "sample": "tsx --env-file=.env scripts/send-sample.ts",
+    "seed:runtime": "tsx --env-file=.env scripts/seed-test-runtime.ts",
+    "reply": "tsx --env-file=.env scripts/send-reply.ts",
+    "mock:tool": "tsx scripts/mock-client-tool.ts",
+    "test:formats": "tsx --env-file=.env scripts/test-formats.ts",
+    "pressure": "tsx --env-file=.env scripts/pressure-test.ts",
+    "pressure:vendor": "tsx --env-file=.env scripts/pressure-vendor.ts",
+    "test:other-client": "tsx --env-file=.env scripts/test-other-client.ts"
   },
   "license": "ISC",
   "type": "module",

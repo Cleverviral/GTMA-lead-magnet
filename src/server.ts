@@ -1,14 +1,12 @@
+import './net.js';
 import crypto from 'node:crypto';
-import net from 'node:net';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { config } from './config.js';
-import { BuildPayload } from './contract.js';
+import { BuildPayload, ReplyRequest } from './contract.js';
 import { ensureSchema, pageByToken, sql } from './db.js';
 import { runBuild } from './build.js';
+import { produceForReply } from './reply/produce.js';
 import type { BuildResponse, Endpoint } from './types.js';
-
-// Node's default 250ms per-address connect window is shorter than the ~300ms round trip to Neon us-east-2.
-net.setDefaultAutoSelectFamilyAttemptTimeout(2000);
 
 const app = Fastify({
   bodyLimit: 5 * 1024 * 1024,
@@ -64,8 +62,29 @@ function buildRoute(endpoint: Endpoint) {
   };
 }
 
+// Last resort: an uncaught error (a DB constraint, a bug) must never leak internals to a caller.
+// Found by pressure testing — an invalid reply_id crashed with a raw Postgres FK message.
+app.setErrorHandler((err, req, reply) => {
+  req.log.error({ err }, 'unhandled error');
+  if (reply.statusCode < 400) reply.code(500);
+  return reply.send({ error: 'internal_error', message: 'the request could not be completed' });
+});
+
 app.post('/magnet/build-previews', buildRoute('build-previews'));
 app.post('/magnet/produce', buildRoute('produce'));
+
+const REPLY_HTTP: Record<string, number> = { not_found: 404, ambiguous: 409, held: 409 };
+
+// Reply time: the autoresponder sends only {sequencer, sequencer_campaign_id, sequencer_lead_id}.
+app.post('/magnet/produce-for-reply', async (req: FastifyRequest, reply: FastifyReply) => {
+  if (!authorized(req.headers.authorization)) return reply.code(401).send({ error: 'unauthorized' });
+  const parsed = ReplyRequest.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'invalid request', issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
+  }
+  const res = await produceForReply(parsed.data);
+  return reply.code(REPLY_HTTP[res.status] ?? 200).send(res);
+});
 
 app.get('/health', async () => {
   await sql`select 1`;

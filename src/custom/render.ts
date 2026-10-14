@@ -191,13 +191,13 @@ export function renderPage({ content, payload, fixture, logo, colors, ctaInfo }:
 <title>${esc(content.page_title)}</title>
 <style>:root{--a:${colors.accent};--a2:${colors.accent2};--ink:${colors.ink};--mut:${colors.mut};--line:${colors.line};--bg:${colors.bg}}${CSS}</style>
 </head><body>
-<div class="topbar"><div class="topin">${logoHtml}<div class="topname"><span>${esc(content.topbar_label)}</span><b>${esc(companyName)}</b></div><a class="cta-btn" href="${esc(ctaInfo.href)}" rel="noopener">Book a call &rarr;</a></div></div>
+<div class="topbar"><div class="topin">${logoHtml}<div class="topname"><span>${esc(content.topbar_label)}</span><b>${esc(companyName)}</b></div><a class="cta-btn" href="${esc(ctaInfo.href)}" rel="noopener">Book a call →</a></div></div>
 <div class="wrap">
 <header><h1>${esc(content.headline)}</h1><p class="sub">${esc(content.subheadline)}</p></header>
 ${content.blocks.map(renderBlock).join('\n')}
 ${carouselHtml}
-<div class="cta"><h3>${esc(content.closing_heading)}</h3><p>${esc(content.closing_body)}</p><a href="${esc(ctaInfo.href)}" rel="noopener">${esc(closingLabel)} &rarr;</a></div>
-<footer>Prepared by ${esc(client.client_name)}${website ? ` &middot; ${esc(website)}` : ''} for ${esc(prepared)}. ${esc(content.footer_note)}</footer>
+<div class="cta"><h3>${esc(content.closing_heading)}</h3><p>${esc(content.closing_body)}</p><a href="${esc(ctaInfo.href)}" rel="noopener">${esc(closingLabel)} →</a></div>
+<footer>Prepared by ${esc(client.client_name)}${website ? ` · ${esc(website)}` : ''} for ${esc(prepared)}. ${esc(content.footer_note)}</footer>
 </div></body></html>`;
   return { html, carouselCount: carousel.cards.length };
 }

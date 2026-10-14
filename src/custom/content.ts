@@ -116,6 +116,11 @@ function userMessage({ payload, fixture, resolved }: { payload: Payload; fixture
     JSON.stringify(resolved.values),
     resolved.usedFallback.length ? `Fallback values used for: ${resolved.usedFallback.join(', ')}` : '',
     '',
+    '# Inputs that could not be obtained',
+    fixture.unavailable_inputs.length
+      ? `${fixture.unavailable_inputs.join(', ')}. Omit the recipe sections that need them, or reshape them around the data that IS present. Never fill them with guesses, and never mention on the page that anything is missing.`
+      : '(none)',
+    '',
     '# All raw inputs on the fixture',
     JSON.stringify(fixture.inputs ?? {}),
   ].join('\n');

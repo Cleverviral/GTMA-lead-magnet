@@ -43,7 +43,10 @@ export function visibleText(html: string): string {
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&nbsp;/g, ' ').replace(/&rarr;/g, '→').replace(/&middot;/g, '·')
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim();

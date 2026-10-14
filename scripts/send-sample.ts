@@ -7,6 +7,8 @@
 //   npm run sample -- --key abc          reuse an idempotency key (second run should return cached results)
 //   npm run sample -- --no-booking       drop booking_url/POC to exercise the CTA fallback flag
 //   npm run sample -- --missing-input    remove a required input from fixture 1 (it must fail)
+//   npm run sample -- --external         external magnet via the mock client tool (run npm run mock:tool first)
+//   npm run sample -- --external --bad-key   the client tool rejects the key: first 403 stops the whole set
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -14,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import type { BuildResponse } from '../src/types.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const kit = path.join(here, '..', '..', 'magnet_service_dev_kit');
+const kit = path.join(here, '..', 'fixtures');
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(name);
 const opt = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
@@ -35,6 +37,29 @@ if (endpoint === 'produce') {
 if (flag('--no-booking')) {
   payload.client.booking_url = null;
   payload.client.booking_poc_name = null;
+}
+// External magnet against the local mock client tool (npm run mock:tool), per example-recipe-external-WIP.md.
+if (flag('--external')) {
+  payload.recipe.skill_md = fs.readFileSync(path.join(kit, 'example-recipe-external-WIP.md'), 'utf8');
+  payload.recipe.play_constants = { title_choice: 1 };
+  // what GTMA's frozen input_manifest holds: the data keys the topic template reads, plus the play constant
+  payload.recipe.input_manifest = [
+    { key: 'company_name', source: 'lead_list', required: true },
+    { key: 'company_industry', source: 'lead_list', required: true },
+    { key: 'company_dept_distribution', source: 'lead_list', required: true },
+    { key: 'title_choice', source: 'play_constant', required: false, fallback: 1 },
+  ];
+  payload.recipe.output_contract = { deliverable: 'html_link', pre_send_checks: ['url_resolves'], expected_turnaround_minutes: 1 };
+  payload.magnet.kind = 'external';
+  payload.magnet.promise = ['A ready-to-publish draft press release about your team growth.'];
+  payload.magnet.description = 'A draft PR on the client newswire, written around the prospect\'s real headcount growth.';
+  payload.magnet.integration = {
+    base_url: process.env.MOCK_TOOL_URL ?? 'http://localhost:9090',
+    auth_kind: 'api_key',
+    credential: flag('--bad-key') ? 'wrong-key' : 'mock-key',
+    endpoint_path: '/stories/marketing/draft',
+    test_mode: { available: false },
+  };
 }
 if (flag('--missing-input')) {
   delete payload.fixtures[0].inputs.company_dept_distribution;
