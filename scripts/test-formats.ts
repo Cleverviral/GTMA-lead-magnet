@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { isFlagged } from '../src/custom/flags.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(here, '..', 'fixtures');
@@ -91,7 +92,7 @@ for (const fmt of FORMATS) {
   if (!res.ok || !body.results) { console.log(JSON.stringify(body, null, 2)); continue; }
   for (const r of body.results) {
     const lead = companies.find((c) => c.person_id === r.person_id)!;
-    const flagged = Object.entries(r.checks).filter(([k, v]) => (k === 'cta_fallback_used' ? v : v === false)).map(([k]) => k);
+    const flagged = Object.entries(r.checks).filter(([k, v]) => isFlagged(k, v)).map(([k]) => k);
     const total = Object.keys(r.checks).length;
     console.log(`  ${r.status === 'produced' ? 'OK  ' : 'FAIL'} ${lead.full_name} @ ${lead.company_name} (${lead.employees_on_linkedin} emp)  ${(r.latency_ms / 1000).toFixed(1)}s  ${total - flagged.length}/${total}${flagged.length ? '  flagged: ' + flagged.join(',') : ''}`);
     if (r.failure_reason) console.log(`       failure: ${r.failure_reason}`);

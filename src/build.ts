@@ -8,6 +8,9 @@ import { writeContent } from './custom/content.js';
 import { cta, palette, renderPage } from './custom/render.js';
 import { runCustomChecks } from './custom/checks.js';
 import { callExternal, compileRequest } from './external/run.js';
+import { findMagnetOwner, findPlayContext } from './gtma.js';
+import { isRelatedManifest, splitManifest } from './related/finders.js';
+import { relatedForProspect } from './related/resolve.js';
 import type { BuildResponse, Colors, CtaInfo, Endpoint, Fixture, FixtureResult, LogoResult, ManifestEntry, Payload } from './types.js';
 
 const inflight = new Map<string, Promise<FixtureResult>>();
@@ -17,6 +20,12 @@ interface BuildContext {
   endpoint: Endpoint;
   base: string;
   manifest: ManifestEntry[] | null;
+  // related-companies magnet (rulings 63-64): the finder keys and per-company keys stay out of the
+  // prospect-level input check; the found companies carry their own values.
+  related: boolean;
+  prospectManifest: ManifestEntry[] | null;
+  perCompany: ManifestEntry[];
+  clientId: string | null;
   colors: Colors;
   ctaInfo: CtaInfo | null;
   turnaroundMs: number;
@@ -61,25 +70,46 @@ function baseResult(fixture: Fixture): FixtureResult {
   };
 }
 
-async function buildCustom(ctx: FixtureContext, fixture: Fixture, key: string): Promise<FixtureResult> {
+async function buildCustom(ctx: FixtureContext, inFixture: Fixture, key: string): Promise<FixtureResult> {
   const { payload, endpoint, manifest, colors, ctaInfo, turnaroundMs, t0 } = ctx;
-  const r = baseResult(fixture);
+  const r = baseResult(inFixture);
   const done = (patch: Partial<FixtureResult>): FixtureResult => ({ ...r, ...patch, latency_ms: Date.now() - t0 });
   if (!manifest) r.notes.push('no input manifest in recipe; required inputs not enforced by the service');
 
-  const resolved = resolveInputs(manifest, fixture, payload.recipe.play_constants);
+  const resolved = resolveInputs(ctx.prospectManifest, inFixture, payload.recipe.play_constants);
   if (resolved.missingRequired.length) return done({ failure_reason: `missing input ${resolved.missingRequired.join(', ')}` });
   if (!ctaInfo) return done({ failure_reason: 'no booking_url and no client website: no CTA target (never invented)' });
+
+  const company = inFixture.company as Record<string, unknown>;
+  const logoJob = getLogo(company?.primary_domain).catch((e: Error): LogoResult => ({ ok: false, reason: `logo error: ${e.message}` }));
+
+  // Related-companies magnet: find the companies first unless GTMA already sent them.
+  let fixture = inFixture;
+  if (ctx.related && !inFixture.related_companies?.length) {
+    const domain = String(company?.primary_domain ?? '').toLowerCase().replace(/^www\./, '');
+    if (!domain) return done({ failure_reason: 'related-companies magnet needs the prospect company domain to find its customers' });
+    try {
+      const out = await relatedForProspect({
+        prospect: { name: String(company?.company_name ?? domain), domain, about: (company?.about as string | null) ?? null },
+        perCompany: ctx.perCompany,
+        clientId: ctx.clientId,
+        play: payload.play ?? null,
+      });
+      r.notes.push(...out.trace);
+      r.related = { basis: out.basis, companies: out.related.map((c) => ({ name: c.name, found_by: c.found_by, like: c.like ?? null })) };
+      if (!out.related.length) return done({ failure_reason: 'no related company could be found (case studies, lookalikes and target market all came up empty)' });
+      fixture = { ...inFixture, related_companies: out.related };
+    } catch (e) {
+      return done({ failure_reason: `finding related companies failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  } else if (fixture.related_companies?.length) {
+    r.related = { basis: 'given', companies: fixture.related_companies.map((c) => ({ name: c.name, found_by: c.found_by, like: c.like ?? null })) };
+  }
 
   let logo: LogoResult;
   let content;
   try {
-    [logo, content] = await Promise.all([
-      getLogo((fixture.company as Record<string, unknown>)?.primary_domain).catch(
-        (e: Error): LogoResult => ({ ok: false, reason: `logo error: ${e.message}` }),
-      ),
-      writeContent({ payload, fixture, resolved }),
-    ]);
+    [logo, content] = await Promise.all([logoJob, writeContent({ payload, fixture, resolved })]);
   } catch (e) {
     return done({ failure_reason: `content generation failed: ${e instanceof Error ? e.message : String(e)}` });
   }
@@ -89,8 +119,8 @@ async function buildCustom(ctx: FixtureContext, fixture: Fixture, key: string): 
 
   const token = crypto.randomBytes(16).toString('base64url');
   const url = `${ctx.base}/${token}`;
-  const { html, carouselCount } = renderPage({ content, payload, fixture, logo, colors, ctaInfo });
-  const { checks, notes } = runCustomChecks({ html, content, payload, fixture, resolved, logo, colors, ctaInfo, carouselCount });
+  const { html, carousel } = renderPage({ content, payload, fixture, logo, colors, ctaInfo });
+  const { checks, notes } = runCustomChecks({ html, content, payload, fixture, resolved, logo, colors, ctaInfo, carousel, related: ctx.related });
   r.notes.push(...notes);
 
   await saveResult({
@@ -176,12 +206,29 @@ async function buildOne(ctx: BuildContext, fixture: Fixture): Promise<FixtureRes
   return job;
 }
 
-export async function runBuild(payload: Payload, endpoint: Endpoint): Promise<BuildResponse> {
+export async function runBuild(inPayload: Payload, endpoint: Endpoint): Promise<BuildResponse> {
+  const manifest = inPayload.recipe.input_manifest ?? parseManifestTable(inPayload.recipe.skill_md);
+  const related = inPayload.magnet.kind === 'custom' && isRelatedManifest(manifest);
+  const split = splitManifest(manifest ?? [], related);
+
+  // The play's angle feeds "What <prospect> could do with this" and the target-market finder.
+  let payload = inPayload;
+  if (!payload.play && payload.gtm_play_id) {
+    const play = await findPlayContext(payload.gtm_play_id).catch(() => null);
+    if (play) payload = { ...payload, play: { ...play } as Payload['play'] };
+  }
+  let clientId = payload.client.client_id ?? null;
+  if (related && !clientId) clientId = (await findMagnetOwner(payload.lead_magnet_id).catch(() => null))?.client_id ?? null;
+
   const ctx: BuildContext = {
     payload,
     endpoint,
     base: hostedBase(payload.magnet),
-    manifest: payload.recipe.input_manifest ?? parseManifestTable(payload.recipe.skill_md),
+    manifest,
+    related,
+    prospectManifest: manifest ? split.prospect : null,
+    perCompany: split.perCompany,
+    clientId,
     colors: palette(payload.client.brand_colors),
     ctaInfo: cta(payload.client),
     turnaroundMs: payload.recipe.output_contract.expected_turnaround_minutes * 60_000,

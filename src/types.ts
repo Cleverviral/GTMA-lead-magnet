@@ -22,11 +22,14 @@ export interface Colors {
   fromClient: boolean;
   accent: string;
   accent2: string;
+  tag: string;
   ink: string;
   mut: string;
   line: string;
   bg: string;
 }
+
+export type RelatedCompany = NonNullable<Fixture['related_companies']>[number];
 
 export interface CtaInfo {
   href: string;
@@ -42,7 +45,14 @@ export type ContentBlock =
   | { type: 'section'; heading: string; intro: string | null }
   | { type: 'paragraph'; text: string }
   | { type: 'stats'; items: { value: string; label: string }[] }
-  | { type: 'bars'; heading: string | null; scale: 'percent' | 'relative'; items: { label: string; value: number; display: string }[] }
+  | { type: 'bars'; heading: string | null; base: string | null; scale: 'percent' | 'relative'; items: { label: string; value: number; display: string }[] }
+  | {
+      type: 'company';
+      index: number;
+      base: string | null;
+      items: { label: string; value: number; display: string }[];
+      note: string;
+    }
   | { type: 'cards'; items: { title: string; body: string }[] }
   | { type: 'list'; style: 'bullet' | 'check' | 'number'; items: string[] }
   | { type: 'table'; columns: string[]; rows: string[][] }
@@ -56,13 +66,11 @@ export interface PageContent {
   headline: string;
   subheadline: string;
   blocks: ContentBlock[];
+  actions: { title: string; body: string; team: string }[];
   proof_heading: string;
   proofpoint_indexes: number[];
-  fallback_claims: { title: string; body: string }[];
-  fallback_claims_source: string | null;
   closing_heading: string;
   closing_body: string;
-  footer_note: string;
 }
 
 export interface ExternalRequestSpec {
@@ -102,6 +110,11 @@ export interface FixtureResult {
   cached?: boolean;
   // external only: the client tool answered 2xx, so a real artifact may exist there (never re-POST blindly)
   artifact_may_exist?: boolean;
+  // related-companies magnets: which companies the page shows and how they were found
+  related?: {
+    basis: 'case_study' | 'target_market' | 'mixed' | 'none' | 'given';
+    companies: { name: string; found_by: 'case_study' | 'lookalike' | 'target_market'; like: string | null }[];
+  };
 }
 
 export interface BuildResponse {

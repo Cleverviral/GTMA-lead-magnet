@@ -40,8 +40,11 @@ POST /magnet/build-previews
 GTMA assembles and sends the full payload (recipe, client brand, proofpoints, up to 10 fixture
 leads with resolved values). This is called from the `build-custom-lead-magnet` /
 `build-external-lead-magnet` skills during the W1/W2 test loop. Full payload shape:
-`magnet_service_dev_kit/magnet-service-contract.md`. This service does no database work for this
-call — it's a pure function of the payload.
+`magnet-service-tool-kit/magnet-service-contract.md`. For ordinary magnets this call is a pure
+function of the payload. For related-companies magnets (kit v3) the service runs the finders itself
+and reads GTMA's database read-only (play summary, the client's do-not-contact list, the enrichment
+cache); it still writes nothing to GTMA on this path. New optional payload fields: `play`,
+`client.client_id`, `resources`, `fixtures[].related_companies` (see README).
 
 **Response** (200, synchronous):
 ```json

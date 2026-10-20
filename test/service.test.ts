@@ -14,8 +14,9 @@ process.env.OPENAI_API_KEY ||= 'test';
 
 const { parseManifestTable, resolveInputs } = await import('../src/manifest.js');
 const { noDashes, spellCode } = await import('../src/text.js');
-const { untracedNumbers, runCustomChecks } = await import('../src/custom/checks.js');
-const { renderPage, palette, cta } = await import('../src/custom/render.js');
+const { untracedNumbers, runCustomChecks, isFlagged } = await import('../src/custom/checks.js');
+const { renderPage, palette, cta, HOUSE_DEFAULT, TRANSPARENCY_TEXT } = await import('../src/custom/render.js');
+const { isRelatedManifest, splitManifest, rawCandidates } = await import('../src/related/finders.js');
 const { validate, candidates, normalizeDomain } = await import('../src/logo.js');
 const { BuildPayload, ReplyRequest } = await import('../src/contract.js');
 const { toStoredValue, resolveCredential } = await import('../src/reply/vendors.js');
@@ -64,48 +65,102 @@ test('numbers must trace to payload values (rounding allowed)', () => {
   const sources = { fixture };
   assert.deepEqual(untracedNumbers({ t: 'IT is 38.6% (107 people) of 277' }, sources), []);
   assert.deepEqual(untracedNumbers({ t: 'grew 999 roles' }, sources), [999]);
+  // "2 million+" in the prospect's own text may be written out on the page.
+  assert.deepEqual(untracedNumbers('reached 2,000,000 people, aiming for 100,000,000', { about: 'touched 2 million+ lives; 100 million+ next' }), []);
+  assert.deepEqual(untracedNumbers('reached 3,000,000 people', { about: 'touched 2 million+ lives' }), [3000000]);
 });
 
 const content: PageContent = {
   missing_required_inputs: [],
   page_title: 'Signal map for DataStax',
-  topbar_label: 'Data Magnet signal map prepared for',
+  topbar_label: 'Data Magnet · signal map for',
   headline: 'Prepared for Ryan at DataStax',
-  subheadline: 'People-growth signals worth tracking at DataStax.',
+  subheadline: 'People signals worth tracking at DataStax.',
   blocks: [
     { type: 'stats', items: [{ value: '375', label: 'people on LinkedIn' }] },
     { type: 'section', heading: 'By country', intro: null },
-    { type: 'bars', heading: null, scale: 'percent', items: [{ label: 'United States', value: 61.01, display: '169 (61.01%)' }] },
-    { type: 'cards', items: [{ title: 'Net adds in Information Technology', body: '107 people, 38.63%.' }] },
+    {
+      type: 'bars',
+      heading: null,
+      base: 'Country shares below are of the 277 profiles with a known country.',
+      scale: 'percent',
+      items: [{ label: 'United States', value: 61.01, display: '169 (61.01%)' }],
+    },
+    { type: 'cards', items: [{ title: 'New hires in Information Technology', body: '107 people, 38.63%.' }] },
+  ],
+  actions: [
+    { title: 'Time your outreach', body: 'Reach the Information Technology team (107 people) when they add people.', team: 'Information Technology' },
+    { title: 'Prioritise accounts', body: 'Point your Sales & Business Development conversations at where that team sits.', team: 'Sales & Business Development' },
   ],
   proof_heading: 'Why teams pick Data Magnet',
   proofpoint_indexes: [],
-  fallback_claims: [{ title: 'Real-time', body: 'Profiles fetched live.' }],
-  fallback_claims_source: 'datamagnet.co',
   closing_heading: 'Want this map live?',
   closing_body: 'Book time with Mayank.',
-  footer_note: 'Data: live LinkedIn headcount snapshot.',
 };
 
-function renderAndCheck({
-  client = payload.client,
-  logo = { ok: false, reason: 'test' } as LogoResult,
-  c = content,
-}: { client?: typeof payload.client; logo?: LogoResult; c?: PageContent } = {}) {
-  const p = { ...payload, client };
+type Overrides = { client?: typeof payload.client; logo?: LogoResult; c?: PageContent; p?: Partial<typeof payload>; fx?: typeof fixture; related?: boolean };
+
+function renderAndCheck({ client = payload.client, logo = { ok: false, reason: 'test' } as LogoResult, c = content, p: extra = {}, fx = fixture, related = false }: Overrides = {}) {
+  const p = { ...payload, ...extra, client };
   const colors = palette(client.brand_colors);
   const ctaInfo = cta(client)!;
-  const resolved = resolveInputs(parseManifestTable(recipe), fixture, {});
-  const { html, carouselCount } = renderPage({ content: c, payload: p, fixture, logo, colors, ctaInfo });
-  return { html, ...runCustomChecks({ html, content: c, payload: p, fixture, resolved, logo, colors, ctaInfo, carouselCount }) };
+  const resolved = resolveInputs(parseManifestTable(recipe), fx, {});
+  const { html, carousel } = renderPage({ content: c, payload: p, fixture: fx, logo, colors, ctaInfo });
+  return { html, carousel, ...runCustomChecks({ html, content: c, payload: p, fixture: fx, resolved, logo, colors, ctaInfo, carousel, related }) };
 }
 
 test('a well-formed page passes every always-rule check', () => {
   const { checks, notes, html } = renderAndCheck();
-  const failing = Object.entries(checks).filter(([k, v]) => (k === 'cta_fallback_used' ? v : !v));
+  const failing = Object.entries(checks).filter(([k, v]) => isFlagged(k, v));
   assert.deepEqual(failing, [], notes.join('\n'));
   assert.ok(html.includes('#16a34a'));
   assert.ok(!html.includes('class="plogo'), 'no logo -> tile hidden');
+});
+
+test('v3 page rules: transparency block, could-do section, one-line footer, no source line', () => {
+  const { html, checks } = renderAndCheck();
+  assert.ok(html.includes(TRANSPARENCY_TEXT));
+  assert.ok(html.includes('What DataStax could do with this'));
+  assert.match(html, /<footer>Prepared by Data Magnet · datamagnet\.co for Ryan, DataStax\.<\/footer>/);
+  assert.ok(!/Source:/.test(html));
+  assert.equal(checks.one_line_footer, true);
+  assert.equal(checks.transparency_block, true);
+});
+
+test('no brand colours, or the stored "default" choice, renders the ember-orange house default (never grey)', () => {
+  for (const brand of [{}, { default: true }, { accent: 'not-a-hex' }]) {
+    const { html, checks } = renderAndCheck({ client: { ...payload.client, brand_colors: brand } });
+    assert.ok(html.includes(HOUSE_DEFAULT.accent));
+    assert.equal(checks.default_palette_used, true);
+    assert.equal(checks.client_brand_colors, true);
+  }
+  assert.equal(palette({ accent: '#16a34a' }).fromClient, true);
+});
+
+test('carousel: case studies first, then the client resources, otherwise omitted and flagged', () => {
+  const withProof = renderAndCheck({ p: { proofpoints: [{ kind: 'case_study', statement: 'Acme cut refresh time in half.' }] } });
+  assert.equal(withProof.carousel.kind, 'proofpoints');
+  const withResources = renderAndCheck();
+  assert.equal(withResources.carousel.kind, 'resources');
+  assert.ok(withResources.html.includes('href="https://docs.datamagnet.co"'));
+  assert.ok(withResources.html.includes('Resources from Data Magnet'));
+  const none = renderAndCheck({ p: { resources: [] } });
+  assert.equal(none.carousel.kind, 'none');
+  assert.equal(none.checks.carousel_present, false);
+});
+
+test('an action naming a catch-all team, a bare 4-digit number and a gendered pronoun are caught', () => {
+  const bad: PageContent = {
+    ...content,
+    blocks: [...content.blocks, { type: 'paragraph', text: 'Her team has 3534 people and it is growing.' }],
+    actions: [{ title: 'Grow', body: 'Talk to General Business & Management.', team: 'General Business & Management' }],
+  };
+  const { checks } = renderAndCheck({ c: bad });
+  assert.equal(checks.action_names_a_buyer_team, false);
+  assert.equal(checks.so_what_section, false);
+  assert.equal(checks.consistent_thousands, false);
+  assert.equal(checks.no_gendered_pronoun, false);
+  assert.equal(checks.no_trend_overclaim, false);
 });
 
 test('a passing logo is shown in the tile', () => {
@@ -125,7 +180,7 @@ test('invented numbers and raw codes are caught', () => {
   const bad: PageContent = {
     ...content,
     blocks: [
-      { type: 'bars', heading: null, scale: 'relative', items: [{ label: 'GB', value: 23, display: '23' }] },
+      { type: 'bars', heading: null, base: null, scale: 'relative', items: [{ label: 'GB', value: 23, display: '23' }] },
       { type: 'paragraph', text: 'They will hire 4321 people.' },
     ],
   };
@@ -183,4 +238,55 @@ test('credential pointers resolve to env vars, with or without the ENV: prefix, 
   assert.equal(resolveCredential('ENV:TEST_TOOL_KEY'), 'secret-123');
   assert.equal(resolveCredential('ENV:NOT_SET_ANYWHERE'), undefined);
   assert.equal(resolveCredential(null), undefined);
+});
+
+test('a magnet is about related companies exactly when its inputs list a finder key', () => {
+  const m = [
+    { key: 'company_domain', source: 'lead_list', required: true },
+    { key: 'company_case_study_customers', source: 'generation_time', required: false },
+    { key: 'company_target_market', source: 'generation_time', required: false },
+    { key: 'company_dept_distribution', source: 'generation_time', required: false },
+  ];
+  assert.equal(isRelatedManifest(m), true);
+  assert.equal(isRelatedManifest(m.filter((e) => !e.key.startsWith('company_case') && !e.key.startsWith('company_target'))), false);
+  const split = splitManifest(m, true);
+  assert.deepEqual(split.prospect.map((e) => e.key), ['company_domain']);
+  assert.deepEqual(split.perCompany.map((e) => e.key), ['company_dept_distribution']);
+  assert.deepEqual(splitManifest(m, false).perCompany, []);
+});
+
+test('finder 1 reads customer names from case-study slugs, logo alt text and story headlines; press logos never count', () => {
+  const page = {
+    url: 'https://www.acme.com/customers/',
+    html: `<a href="/case-studies/general-mills/">x</a><img alt="Gallo logo"><img alt="Acme logo"><img alt="Forbes">
+           <img alt="arrow"><h3>How Lovesac built a cleaner supply chain</h3><img alt="The Wall Street Journal">`,
+  };
+  const names = rawCandidates('acme.com', [page]);
+  assert.ok(names.includes('General Mills'));
+  assert.ok(names.includes('Gallo'));
+  assert.ok(names.includes('Lovesac'));
+  for (const n of ['Acme', 'Forbes', 'arrow', 'The Wall Street Journal']) assert.ok(!names.includes(n), n);
+});
+
+test('a related company card shows its honest label and headcount from the finder, and the related checks pass', () => {
+  const fx = {
+    ...fixture,
+    related_companies: [
+      { name: 'General Mills', domain: 'generalmills.com', linkedin_url: 'https://www.linkedin.com/company/general-mills', industry: 'Manufacturing', employee_count: 25163, hq_country: 'United States', found_by: 'case_study' as const, like: null, inputs: {}, unavailable_inputs: [] },
+      { name: 'GALLO', domain: 'gallo.com', linkedin_url: 'https://www.linkedin.com/company/gallo', industry: 'Beverage Manufacturing', employee_count: 5469, hq_country: 'United States', found_by: 'case_study' as const, like: null, inputs: {}, unavailable_inputs: [] },
+      { name: 'Patagonia', domain: 'patagonia.com', linkedin_url: 'https://www.linkedin.com/company/patagonia', industry: 'Retail', employee_count: 9000, hq_country: 'United States', found_by: 'lookalike' as const, like: 'Lovesac', inputs: {}, unavailable_inputs: [] },
+    ],
+  };
+  const card = (index: number) => ({
+    type: 'company' as const, index, base: 'Team shares below are of the 2,181 profiles with a known team.',
+    items: [{ label: 'Sales & Business Development', value: 21.2, display: '462 (21.2%)' }], note: 'Watch new hires in Sales & Business Development.',
+  });
+  const c: PageContent = { ...content, blocks: [{ type: 'section', heading: 'Hiring at companies you work with', intro: null }, card(0), card(1), card(2)] };
+  const { html, checks } = renderAndCheck({ c, fx, related: true });
+  assert.ok(html.includes('From your case studies'));
+  assert.ok(html.includes('Similar to Lovesac'));
+  assert.ok(html.includes('<b>25,163</b> people on LinkedIn'));
+  for (const k of ['three_related_companies', 'prospect_not_a_subject', 'honest_source_label', 'every_related_company_shown', 'shares_base_stated']) {
+    assert.equal(checks[k], true, k);
+  }
 });

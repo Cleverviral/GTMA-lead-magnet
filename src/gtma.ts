@@ -17,6 +17,8 @@ export interface LeadRow {
   sub_profile_id: string;
   gtm_play_id: string;
   gtm_play_name: string;
+  gtm_play_summary: string | null;
+  gtm_play_offer: string | null;
   lead_magnet_id: string | null;
   magnet_reply_guidance: string | null;
   sequencer: string | null;
@@ -32,13 +34,71 @@ export interface LeadRow {
 export async function findLeads(campaignId: string, leadId: string): Promise<LeadRow[]> {
   return gtma<LeadRow[]>`
     select pll.id::text as lead_list_id, pll.person_id, pll.company_id, pll.email, pll.enrichments_used,
-           pll.client_id, pll.sub_profile_id, pll.gtm_play_id, g.gtm_play_name, g.lead_magnet_id,
+           pll.client_id, pll.sub_profile_id, pll.gtm_play_id, g.gtm_play_name, g.gtm_play_summary,
+           g.gtm_play_offer, g.lead_magnet_id,
            g.magnet_reply_guidance, sp.sequencer, sp.client_name, sp.sub_profile_name, sp.product_website,
            sp.booking_url, sp.booking_poc_name, sp.brand_colors, sp.logo_url
       from play_lead_lists pll
       join gtm_plays g on g.gtm_play_id = pll.gtm_play_id
       join client_sub_profiles sp on sp.sub_profile_id = pll.sub_profile_id
      where pll.sequencer_campaign_id = ${campaignId} and pll.sequencer_lead_id = ${leadId}`;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (s: unknown): s is string => typeof s === 'string' && UUID.test(s);
+
+export interface PlayContext {
+  name: string | null;
+  summary: string | null;
+  offer: string | null;
+  reply_guidance: string | null;
+}
+
+export async function findPlayContext(playId: string): Promise<PlayContext | null> {
+  if (!isUuid(playId)) return null;
+  const [row] = await gtma<PlayContext[]>`
+    select gtm_play_name as name, gtm_play_summary as summary, gtm_play_offer as offer, magnet_reply_guidance as reply_guidance
+      from gtm_plays where gtm_play_id = ${playId}`;
+  return row ?? null;
+}
+
+export async function findMagnetOwner(magnetId: string): Promise<{ client_id: string; sub_profile_id: string | null } | null> {
+  if (!isUuid(magnetId)) return null;
+  const [row] = await gtma<{ client_id: string; sub_profile_id: string | null }[]>`
+    select client_id, sub_profile_id from lead_magnets where lead_magnet_id = ${magnetId}`;
+  return row ?? null;
+}
+
+// The client's do-not-contact list (ruling 67a): related companies on it are never shown.
+export async function findDncValues(clientId: string): Promise<string[]> {
+  if (!isUuid(clientId)) return [];
+  const rows = await gtma<{ dnc_value: string }[]>`select dnc_value from dnc_list where client_id = ${clientId}`;
+  return rows.map((r) => r.dnc_value);
+}
+
+export async function findCompanyIdByLinkedin(linkedinUrl: string): Promise<string | null> {
+  const [row] = await gtma<{ company_id: string }[]>`
+    select company_id from company_aliases
+     where alias_key = 'company_linkedin_url' and rtrim(alias_value, '/') = rtrim(${linkedinUrl}, '/') limit 1`;
+  return row?.company_id ?? null;
+}
+
+export interface ResourceRow {
+  title: string;
+  description: string | null;
+  url: string;
+  kind: string;
+}
+
+// The client's own resources for the carousel fallback (ruling 57): assets with a public link.
+export async function findResources(clientId: string, subProfileId: string | null): Promise<ResourceRow[]> {
+  if (!isUuid(clientId)) return [];
+  return gtma<ResourceRow[]>`
+    select title, summary as description, source_url as url, asset_type as kind from assets
+     where client_id = ${clientId} and (sub_profile_id is null or sub_profile_id = ${subProfileId})
+       and gtm_play_id is null and source_url is not null and status in ('ready', 'pending', 'extracting')
+     order by (asset_type = 'case_study') desc, (asset_type = 'api_docs') desc, created_at
+     limit 6`;
 }
 
 export interface MagnetRow {

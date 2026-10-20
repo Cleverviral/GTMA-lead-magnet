@@ -15,7 +15,8 @@
     "test:formats": "tsx --env-file=.env scripts/test-formats.ts",
     "pressure": "tsx --env-file=.env scripts/pressure-test.ts",
     "pressure:vendor": "tsx --env-file=.env scripts/pressure-vendor.ts",
-    "test:other-client": "tsx --env-file=.env scripts/test-other-client.ts"
+    "test:other-client": "tsx --env-file=.env scripts/test-other-client.ts",
+    "test:related": "tsx --env-file=.env scripts/test-related.ts"
   },
   "license": "ISC",
   "type": "module",

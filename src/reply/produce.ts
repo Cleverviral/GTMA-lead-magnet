@@ -11,6 +11,7 @@ import * as g from '../gtma.js';
 import { resolveManifest, type InputResolution } from './inputs.js';
 import { runQa, type QaVerdict } from './qa.js';
 import { resolveCredential } from './vendors.js';
+import { isRelatedManifest, splitManifest } from '../related/finders.js';
 import type { Payload } from '../types.js';
 
 export type ReplyRequestBody = z.infer<typeof ReplyRequest>;
@@ -124,7 +125,11 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
     lead.company_id ? g.findCompanyFacts(lead.company_id, lead.sub_profile_id) : null,
     g.findPersonFacts(lead.person_id, lead.sub_profile_id),
   ]);
-  const inputs = await resolveManifest(runtime.input_manifest, { lead, company, person, playConstants: runtime.play_constants ?? {} });
+  // Related-companies magnet (ruling 63a): the finder keys and the per-company keys are resolved by
+  // the build step for each FOUND company; only the prospect's own keys go through this waterfall.
+  const related = isRelatedManifest(runtime.input_manifest);
+  const { prospect: prospectManifest } = splitManifest(runtime.input_manifest, related);
+  const inputs = await resolveManifest(prospectManifest, { lead, company, person, playConstants: runtime.play_constants ?? {} });
   if (inputs.missingRequired.length) {
     return failed(`missing input ${inputs.missingRequired.join(', ')} (lead_list keys must be on the lead before go-live: gate bypass)`, inputs);
   }
@@ -161,11 +166,15 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
         kind: magnet.magnet_kind, name: magnet.lead_magnet_name, promise: magnet.promise ?? [], description: magnet.description ?? '',
         hosting: magnet.hosting, hosted_base_url: magnet.hosted_base_url, integration,
       },
+      play: {
+        name: lead.gtm_play_name, summary: lead.gtm_play_summary, offer: lead.gtm_play_offer, reply_guidance: lead.magnet_reply_guidance,
+      },
       client: {
-        client_name: lead.client_name, website: lead.product_website, brand_colors: lead.brand_colors ?? {},
+        client_id: lead.client_id, client_name: lead.client_name, website: lead.product_website, brand_colors: lead.brand_colors ?? {},
         logo_url: lead.logo_url, booking_url: lead.booking_url, booking_poc_name: lead.booking_poc_name,
       },
       proofpoints: await g.findProofpoints(lead.sub_profile_id),
+      resources: await g.findResources(lead.client_id, lead.sub_profile_id),
       fixtures: [{
         person_id: lead.person_id, lead_list_id: lead.lead_list_id, reply_id: replyId,
         first_name: (person?.first_name as string | null) ?? (person?.full_name as string | null)?.split(' ')[0] ?? null,
@@ -193,7 +202,7 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
     const built = await runBuild({ ...payload, idempotency_key: `${runKey}:a${attempt}` }, 'produce');
     const r = built.results[0]!;
     attempts = attempt + 1;
-    last = { url: r.url, checks: r.checks, notes: r.notes, latency_ms: r.latency_ms, omitted_inputs: unavailable, attempts };
+    last = { url: r.url, checks: r.checks, notes: r.notes, latency_ms: r.latency_ms, omitted_inputs: unavailable, attempts, related: r.related ?? null };
     // External: once the client tool answered 2xx a real artifact may exist there, so never re-POST blindly.
     const mayRetry = !(magnet.magnet_kind === 'external' && r.artifact_may_exist);
     if (r.status !== 'produced' || !r.url) {
@@ -216,6 +225,7 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
         prospect: { full_name: payload.fixtures[0]!.full_name ?? null, company_name: (company?.company_name as string | null) ?? null },
         obtained: Object.keys(inputs.values),
         omitted: inputs.unavailable,
+        related: r.related ?? null,
         checks: r.checks,
         pageText: await deliverableText(magnet.magnet_kind, r.url),
       });

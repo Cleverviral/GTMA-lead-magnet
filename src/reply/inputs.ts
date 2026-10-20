@@ -46,7 +46,8 @@ const PERSON_FACTS: Record<string, string> = {
 };
 
 export interface WaterfallContext {
-  lead: LeadRow;
+  // The replying lead, or a related company stood in its place (no person, no email).
+  lead: Pick<LeadRow, 'enrichments_used' | 'email' | 'company_id'> & { person_id: string | null };
   company: Record<string, unknown> | null;
   person: Record<string, unknown> | null;
   playConstants: Record<string, unknown>;

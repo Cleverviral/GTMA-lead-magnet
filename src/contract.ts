@@ -29,6 +29,23 @@ const Integration = z
   })
   .passthrough();
 
+// A company that matters to the prospect (rulings 63-64, 68a). GTMA may send them already found;
+// otherwise the service runs the finders itself when the recipe lists the finder keys.
+const RelatedCompany = z
+  .object({
+    name: z.string().min(1),
+    domain: z.string().nullish(),
+    linkedin_url: z.string().nullish(),
+    industry: z.string().nullish(),
+    employee_count: z.number().nullish(),
+    hq_country: z.string().nullish(),
+    found_by: z.enum(['case_study', 'lookalike', 'target_market']),
+    like: z.string().nullish(),
+    inputs: anyRecord.default({}),
+    unavailable_inputs: z.array(z.string()).default([]),
+  })
+  .passthrough();
+
 const Fixture = z
   .object({
     person_id: id,
@@ -40,6 +57,7 @@ const Fixture = z
     inputs: anyRecord.default({}),
     // manifest keys that could not be obtained: their sections are omitted or reshaped, never invented
     unavailable_inputs: z.array(z.string()).default([]),
+    related_companies: z.array(RelatedCompany).nullish(),
   })
   .passthrough();
 
@@ -92,12 +110,25 @@ export const BuildPayload = z
         integration: Integration.nullish(),
       })
       .passthrough(),
+    // The play this magnet serves: its angle feeds "What <prospect> could do with this" (ruling 70)
+    // and the target-market finder. Optional; looked up by gtm_play_id when absent.
+    play: z
+      .object({
+        name: z.string().nullish(),
+        summary: z.string().nullish(),
+        offer: z.string().nullish(),
+        reply_guidance: z.string().nullish(),
+      })
+      .passthrough()
+      .nullish(),
     client: z
       .object({
+        client_id: id.nullish(),
         client_name: z.string().min(1),
         website: z.string().nullish(),
+        // hex colours, or {"default": true} = the operator chose the house default (ruling 54a)
         brand_colors: z
-          .record(z.string())
+          .record(z.any())
           .nullish()
           .transform((v) => v ?? {}),
         logo_url: z.string().nullish(),
@@ -111,6 +142,20 @@ export const BuildPayload = z
           .object({
             kind: z.string().nullish(),
             statement: z.string().min(1),
+          })
+          .passthrough(),
+      )
+      .default([]),
+    // The client's own resources (API docs, guides, tools): the carousel's fallback when there are
+    // no approved case studies (ruling 57). Never filler from the magnet's own description.
+    resources: z
+      .array(
+        z
+          .object({
+            title: z.string().min(1),
+            description: z.string().nullish(),
+            url: z.string().url(),
+            kind: z.string().nullish(),
           })
           .passthrough(),
       )

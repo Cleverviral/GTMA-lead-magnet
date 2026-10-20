@@ -893,5 +893,25 @@
     }
    }
   }
+ ],
+ "resources": [
+  {
+   "title": "API docs",
+   "description": "The full reference for every DataMagnet endpoint.",
+   "url": "https://docs.datamagnet.co",
+   "kind": "api_docs"
+  },
+  {
+   "title": "Signal API",
+   "description": "Hiring and company-change signals as a live feed.",
+   "url": "https://www.datamagnet.co/signal-api/",
+   "kind": "other"
+  },
+  {
+   "title": "Company API",
+   "description": "Headcount, departments and company facts by domain.",
+   "url": "https://www.datamagnet.co/company-api/",
+   "kind": "other"
+  }
  ]
 }

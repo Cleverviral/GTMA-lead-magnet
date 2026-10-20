@@ -1,6 +1,7 @@
 # Lead Magnet Service (the generator)
 
-Two touch points, per `../magnet_service_dev_kit/LEAD-MAGNET-SYSTEM.md` and the contract v4:
+Two touch points, per `../magnet-service-tool-kit/LEAD-MAGNET-SYSTEM.md` and the contract
+(`../magnet-service-tool-kit/magnet-service-contract.md`, kit v3 2026-10-20):
 
 1. **Previews (build + approve):** GTMA pushes one self-contained payload; the service builds and
    hosts 5 pages and returns links + check results. No GTMA database access on this path.
@@ -27,6 +28,9 @@ npm run dev            # http://localhost:8080
 npm test               # unit tests, no network or LLM
 npm run typecheck
 npm run sample         # previews: the 5 real Data Magnet leads in fixtures/, like GTMA would send
+npm run test:related   # previews of a related-companies magnet on the same 5 leads (finders run live)
+npm run test:formats   # two other Data Magnet formats on 6 different real companies
+npm run test:other-client   # SocialHP: real case studies, empty brand card
 npm run seed:runtime   # TEST BRANCH ONLY: stand-in for GTMA's approval (runtime + TEST card values)
 npm run reply          # reply time: email_bison · 107 · 103430, like the autoresponder would send
 npm run seed:runtime -- --undo   # remove the test runtime, TEST card values and test productions
@@ -36,6 +40,7 @@ npm run seed:runtime -- --undo   # remove the test runtime, TEST card values and
 `--external` (external magnet against the local mock client tool; start it first with `npm run mock:tool`) ·
 `--external --bad-key` (the tool rejects the key: the first 403 stops the whole set).
 `npm run reply` flags: `--campaign <id>` · `--lead <id>` · `--sequencer <name>` · `--key <k>`.
+`npm run test:related` flags: `--fixtures 2` · `--default` (no brand colours: house default palette).
 Set `SERVICE_URL` to hit a deployed instance instead of localhost.
 
 ## Endpoints
@@ -80,12 +85,59 @@ retry up to `failure_policy.retries` (default 2); every run is logged, pass or f
 `positive_reply` when an `interested` reply row exists for the lead (or `reply_id` is sent), else
 `manual`. A repeat call for a reply that already has a produced row returns the same link.
 
+## The page (kit v3)
+
+Every custom page has the same frame around the magnet's own sections, in this order: top bar and
+CTA → header → the magnet's sections → **What <prospect> could do with this** (three actions, each
+naming the team that buys what the prospect sells, never a catch-all like "Other") → carousel →
+transparency note ("This is auto-generated and reviewed by our team. Happy to dive deeper on our
+introduction call.") → closing CTA → one-line footer ("Prepared by <client> · <site> for <first
+name>, <company>."). No source lines or internal words on the page.
+
+- **Colours:** the client's `brand_colors.accent` when it is a valid hex; otherwise (missing, or
+  `{"default": true}`) the house ember-orange palette, flagged `default_palette_used`.
+- **Carousel:** approved case studies (`proofpoints`) first; else the client's own `resources`
+  (title, description, url; GTMA reads them from `assets`); else omitted.
+- **Numbers:** written 1,234; every share states its base; no trend claims from one snapshot; no
+  gendered pronouns.
+
+### Related-companies magnets (rulings 63-71)
+
+A magnet whose `input_manifest` contains `company_case_study_customers` or `company_target_market`
+shows data about three companies that matter to the prospect, never the prospect's own. Finders
+run in this order (`src/related/`):
+1. **Case-study customers** on the prospect's own site, matched to Blitz by exact name (press logos excluded).
+2. **Lookalikes** of any brand found: same industry and country, closest in size.
+3. **Target market**, only when no brand was found: an LLM maps who the prospect says it serves to a
+   Blitz company search (allowed industries only), largest companies first.
+
+A company is used only when at least 20% of its LinkedIn people list a team, and never if it is on
+the client's do-not-contact list. Every card says how it was found ("From your case studies",
+"Similar to <brand>", "In your market"). The other `company_*` keys in the manifest are resolved
+per related company. GTMA may send its own picks as `fixture.related_companies`; then the finders
+are skipped. At preview time this path reads GTMA's database read-only (play summary, the magnet
+owner's do-not-contact list, the enrichment cache) and degrades gracefully if it can't.
+
+### Payload fields added in kit v3 (all optional)
+
+| Field | What |
+|---|---|
+| `play` | `{name, summary, offer, reply_guidance}`; looked up from `gtm_play_id` if absent |
+| `client.client_id` | the client's id, for its do-not-contact list |
+| `client.brand_colors` | may be `{"default": true}` (house palette) |
+| `resources` | `[{title, description?, url, kind?}]`, the carousel when there are no case studies |
+| `fixtures[].related_companies` | GTMA-chosen related companies (`name, domain, linkedin_url, found_by, like, inputs`) |
+
 ## Checks (custom pages)
 
 `inputs_present · no_placeholders · prospect_named · client_named · client_brand_colors ·
 logo_gate_respected · no_em_dashes · cta_top_and_bottom · poc_named_in_cta · carousel_present ·
-no_unknown_text · codes_spelled_out · numbers_traceable · noindex · url_resolves · within_turnaround`.
-All pass-when-true except `cta_fallback_used` (true = booking link missing on the card).
+transparency_block · so_what_section · action_names_a_buyer_team · one_line_footer ·
+no_internal_vocab · no_gendered_pronoun · no_trend_overclaim · shares_base_stated ·
+consistent_thousands · no_unknown_text · codes_spelled_out · numbers_traceable · noindex`, plus on
+related-companies magnets `three_related_companies · prospect_not_a_subject · honest_source_label ·
+every_related_company_shown`. All pass-when-true except the two flags `cta_fallback_used` (booking
+link missing on the card) and `default_palette_used` (no brand colours).
 
 ## Deploy (Render)
 

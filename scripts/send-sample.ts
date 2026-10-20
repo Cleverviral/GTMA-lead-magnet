@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { isFlagged } from '../src/custom/flags.js';
 import type { BuildResponse } from '../src/types.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -85,7 +86,7 @@ const names: Record<string, string> = Object.fromEntries(
   payload.fixtures.map((f: { person_id: string; full_name: string; company: { company_name: string } }) => [f.person_id, `${f.full_name} @ ${f.company.company_name}`]),
 );
 for (const r of result.results) {
-  const failed = Object.entries(r.checks).filter(([k, v]) => (k === 'cta_fallback_used' ? v : v === false)).map(([k]) => k);
+  const failed = Object.entries(r.checks).filter(([k, v]) => isFlagged(k, v)).map(([k]) => k);
   const total = Object.keys(r.checks).length;
   console.log(`${r.status === 'produced' ? 'OK  ' : 'FAIL'} ${names[r.person_id]}${r.cached ? '  (cached)' : ''}`);
   console.log(`     url: ${r.url ?? '-'}   ${(r.latency_ms / 1000).toFixed(1)}s   checks ${total - failed.length}/${total}${failed.length ? '  flagged: ' + failed.join(', ') : ''}`);
