@@ -14,8 +14,10 @@ process.env.OPENAI_API_KEY ||= 'test';
 
 const { parseManifestTable, resolveInputs } = await import('../src/manifest.js');
 const { noDashes, spellCode } = await import('../src/text.js');
-const { untracedNumbers, runCustomChecks, isFlagged } = await import('../src/custom/checks.js');
-const { renderPage, palette, cta, HOUSE_DEFAULT, TRANSPARENCY_TEXT } = await import('../src/custom/render.js');
+const { untracedNumbers, unformattedNumbers, runCustomChecks, isFlagged } = await import('../src/custom/checks.js');
+const { renderPage, cta, companySlug, pageToken, HOUSE_DEFAULT, TRANSPARENCY_TEXT } = await import('../src/custom/render.js');
+const { colorsFrom, paletteFrom, pickBrand, gate, DEFAULT_COLORS } = await import('../src/brand.js');
+const { externalSpec, requestValues } = await import('../src/external/run.js');
 const { isRelatedManifest, splitManifest, rawCandidates } = await import('../src/related/finders.js');
 const { validate, candidates, normalizeDomain } = await import('../src/logo.js');
 const { BuildPayload, ReplyRequest } = await import('../src/contract.js');
@@ -95,14 +97,18 @@ const content: PageContent = {
   proof_heading: 'Why teams pick Data Magnet',
   proofpoint_indexes: [],
   closing_heading: 'Want this map live?',
-  closing_body: 'Book time with Mayank.',
+  closing_body: 'Book 15 minutes with us and we will set it up for DataStax.',
 };
 
-type Overrides = { client?: typeof payload.client; logo?: LogoResult; c?: PageContent; p?: Partial<typeof payload>; fx?: typeof fixture; related?: boolean };
+// The prospect's own colour, as the brand pull would return it (ruling 89).
+const PROSPECT_COLORS = colorsFrom(paletteFrom('#16a34a', 'theme_color', '#16a34a', []));
+type Overrides = {
+  client?: typeof payload.client; logo?: LogoResult; c?: PageContent; p?: Partial<typeof payload>; fx?: typeof fixture;
+  related?: boolean; colors?: typeof PROSPECT_COLORS;
+};
 
-function renderAndCheck({ client = payload.client, logo = { ok: false, reason: 'test' } as LogoResult, c = content, p: extra = {}, fx = fixture, related = false }: Overrides = {}) {
+function renderAndCheck({ client = payload.client, logo = { ok: false, reason: 'test' } as LogoResult, c = content, p: extra = {}, fx = fixture, related = false, colors = PROSPECT_COLORS }: Overrides = {}) {
   const p = { ...payload, ...extra, client };
-  const colors = palette(client.brand_colors);
   const ctaInfo = cta(client)!;
   const resolved = resolveInputs(parseManifestTable(recipe), fx, {});
   const { html, carousel } = renderPage({ content: c, payload: p, fixture: fx, logo, colors, ctaInfo });
@@ -127,14 +133,54 @@ test('v3 page rules: transparency block, could-do section, one-line footer, no s
   assert.equal(checks.transparency_block, true);
 });
 
-test('no brand colours, or the stored "default" choice, renders the ember-orange house default (never grey)', () => {
-  for (const brand of [{}, { default: true }, { accent: 'not-a-hex' }]) {
-    const { html, checks } = renderAndCheck({ client: { ...payload.client, brand_colors: brand } });
-    assert.ok(html.includes(HOUSE_DEFAULT.accent));
-    assert.equal(checks.default_palette_used, true);
-    assert.equal(checks.client_brand_colors, true);
-  }
-  assert.equal(palette({ accent: '#16a34a' }).fromClient, true);
+test('no prospect colour passing the check renders the ember-orange default (never grey)', () => {
+  const { html, checks } = renderAndCheck({ colors: DEFAULT_COLORS });
+  assert.ok(html.includes(`--a:${HOUSE_DEFAULT.accent};`));
+  assert.equal(checks.default_palette_used, true);
+  assert.equal(checks.prospect_brand_colors, true);
+  assert.equal(renderAndCheck().checks.default_palette_used, false);
+});
+
+test('the prospect colour comes from theme-color, then the CSS; presets and greys never count', async () => {
+  const fromMeta = await pickBrand('<meta name="theme-color" content="#1d4ed8">', '', null);
+  assert.equal(fromMeta.source, 'theme_color');
+  assert.equal(fromMeta.accent, '#1d4ed8');
+  // a WordPress preset and a grey fail the gate; the brand CSS variable wins
+  const fromCss = await pickBrand('<meta name="theme-color" content="#0073aa"><meta name="theme-color" content="#888888">', ':root{--brand-primary:#7c3aed}', null);
+  assert.equal(fromCss.source, 'css_brand_variable');
+  const nothing = await pickBrand('', 'body{color:#333}', null);
+  assert.equal(nothing.source, 'default');
+  assert.equal(nothing.accent, HOUSE_DEFAULT.accent);
+  // a light brand colour is darkened in its own hue until white text reads on it
+  const darkened = gate('#38bdf8');
+  assert.ok(darkened && darkened !== '#38bdf8');
+  assert.equal(gate('#f5f5f5'), null);
+});
+
+test('page links are the company name plus a short random code', () => {
+  assert.equal(companySlug('Millennium Information Services, Inc.'), 'millennium-information-services');
+  assert.equal(companySlug('Lovesac Store Co.'), 'lovesac-store');
+  assert.equal(companySlug('Société Générale'), 'societe-generale');
+  assert.equal(companySlug('株式会社'), 'page');
+  assert.match(pageToken('Datassential'), /^datassential-[a-z2-9]{6}$/);
+  assert.notEqual(pageToken('Datassential'), pageToken('Datassential'));
+});
+
+test('bottom of the page: transparency line, case studies, "Book a call with us", footer; centred and bold', () => {
+  const { html, checks } = renderAndCheck();
+  assert.ok(html.indexOf('class="tblock"') < html.indexOf('class="carousel"'));
+  assert.ok(html.indexOf('class="carousel"') < html.indexOf('class="cta"'));
+  assert.ok(html.indexOf('class="cta"') < html.indexOf('<footer>'));
+  assert.ok(html.includes('Book a call with us →'));
+  assert.equal(checks.bottom_order, true);
+  assert.equal(checks.closing_centred_bold, true);
+  assert.equal(checks.no_client_logo, true);
+});
+
+test('the booking contact is never named on the page', () => {
+  const named: PageContent = { ...content, closing_body: 'Book time with Mayank.' };
+  const { checks } = renderAndCheck({ c: named, client: { ...payload.client, booking_poc_name: 'Mayank' } });
+  assert.equal(checks.cta_about_next_step_not_a_person, false);
 });
 
 test('carousel: case studies first, then the client resources, otherwise omitted and flagged', () => {
@@ -163,6 +209,11 @@ test('an action naming a catch-all team, a bare 4-digit number and a gendered pr
   assert.equal(checks.no_trend_overclaim, false);
 });
 
+test('standard names like ISO 27001 are not counts that need thousands separators', () => {
+  assert.deepEqual(unformattedNumbers('Certified to ISO 9001 and ISO/IEC 27001, SOC 2 audited.'), []);
+  assert.deepEqual(unformattedNumbers('A team of 3534 people.'), ['3534']);
+});
+
 test('a passing logo is shown in the tile', () => {
   const { checks, html } = renderAndCheck({ logo: { ok: true, source: 'site_icon', dataUri: 'data:image/png;base64,AAAA', hasTransparency: true } });
   assert.ok(html.includes('class="plogo pad"'));
@@ -170,9 +221,9 @@ test('a passing logo is shown in the tile', () => {
 });
 
 test('missing booking link falls back to the client website and is flagged', () => {
-  const { checks } = renderAndCheck({ client: { ...payload.client, booking_url: null, booking_poc_name: null } });
+  const { checks } = renderAndCheck({ client: { ...payload.client, booking_url: null } });
   assert.equal(checks.cta_fallback_used, true);
-  assert.equal(checks.poc_named_in_cta, false);
+  assert.equal(checks.cta_about_next_step_not_a_person, true);
   assert.equal(checks.cta_top_and_bottom, true);
 });
 
@@ -230,6 +281,41 @@ test('the reply request needs only the lead reference', () => {
   const ok = ReplyRequest.parse({ sequencer: 'email_bison', sequencer_campaign_id: 107, sequencer_lead_id: '103430' });
   assert.equal(ok.sequencer_campaign_id, '107');
   assert.equal(ReplyRequest.safeParse({ sequencer: 'email_bison', sequencer_campaign_id: '107' }).success, false);
+  // the contract's names for the same fields
+  const v5 = ReplyRequest.parse({ sequencer: 'email_bison', campaign_id: '107', lead_id: 103430, reply_id: 42 });
+  assert.equal(v5.sequencer_campaign_id, '107');
+  assert.equal(v5.sequencer_lead_id, '103430');
+});
+
+const externalPayload = (integration: Record<string, unknown>, outputContract: Record<string, unknown> = {}) =>
+  BuildPayload.parse({
+    ...sample,
+    idempotency_key: 'k',
+    recipe: { ...sample.recipe, output_contract: { deliverable: 'html_link', ...outputContract } },
+    magnet: { ...sample.magnet, kind: 'external', integration: { base_url: 'http://localhost:8790', credential: 'test-key-123', ...integration } },
+  });
+
+test('external setup: the frozen recipe carries the mapping and link field; unsupported logins stop', () => {
+  const frozen = {
+    method: 'POST', header: 'x-api-key', link_field: 'report_url',
+    request_mapping: [
+      { field: 'company_domain', data_key: 'company_domain' },
+      { field: 'industry', data_key: 'company_industry' },
+      { field: 'employee_count', data_key: 'company_employee_count' },
+    ],
+  };
+  const spec = externalSpec(externalPayload({ auth_kind: 'api_key', endpoint_path: '/v1/reports' }, frozen));
+  assert.ok(!('error' in spec), JSON.stringify(spec));
+  if ('error' in spec) return;
+  const { body, missing } = requestValues(spec, fixture, { values: {}, missingRequired: [], usedFallback: [] }, {});
+  assert.deepEqual(missing, []);
+  assert.deepEqual(body, { company_domain: 'datastax.com', industry: fixture.company.industry, employee_count: 375 });
+  for (const auth_kind of ['oauth2', 'none']) {
+    const s = externalSpec(externalPayload({ auth_kind, endpoint_path: '/v1/reports' }, frozen));
+    assert.ok('error' in s && /login method isn't supported/.test(s.error));
+  }
+  const noLink = externalSpec(externalPayload({ auth_kind: 'bearer', endpoint_path: '/v1/reports' }, { ...frozen, link_field: undefined }));
+  assert.ok('error' in noLink && /link field/.test(noLink.error));
 });
 
 test('credential pointers resolve to env vars, with or without the ENV: prefix, never to a literal', () => {

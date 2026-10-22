@@ -10,22 +10,22 @@ const ManifestEntry = z.object({
   fallback: z.any().nullish(),
 });
 
+// "Connect your own lead magnet" (rulings 72-86): the client's own tool makes the deliverable.
+// The request mapping, method, header name and link field may come here or in the frozen recipe's
+// output_contract (where GTMA stores them). The credential is passed in-flight for previews only.
+const RequestMapping = z.array(z.object({ field: z.string().min(1), data_key: z.string().min(1) }).passthrough());
+
 const Integration = z
   .object({
     base_url: z.string().url(),
     auth_kind: z.string().default('api_key'),
-    auth_header: z.string().nullish(),
     credential: z.string().min(1),
     endpoint_path: z.string().nullish(),
-    test_mode: z
-      .object({
-        available: z.boolean().default(false),
-        how: z.string().nullish(),
-        name: z.string().nullish(),
-        value: z.any().nullish(),
-      })
-      .passthrough()
-      .nullish(),
+    method: z.string().nullish(),
+    header: z.string().nullish(),
+    auth_header: z.string().nullish(),
+    request_mapping: RequestMapping.nullish(),
+    link_field: z.string().nullish(),
   })
   .passthrough();
 
@@ -46,9 +46,12 @@ const RelatedCompany = z
   })
   .passthrough();
 
+// A preview person (custom) or company (external), read only and identified by person_id +
+// company_id (ruling 101); lead_list_id exists only at reply time.
 const Fixture = z
   .object({
-    person_id: id,
+    person_id: id.nullish(),
+    company_id: id.nullish(),
     lead_list_id: id.nullish(),
     reply_id: id.nullish(),
     first_name: z.string().nullish(),
@@ -59,16 +62,32 @@ const Fixture = z
     unavailable_inputs: z.array(z.string()).default([]),
     related_companies: z.array(RelatedCompany).nullish(),
   })
-  .passthrough();
+  .passthrough()
+  .refine((f) => f.person_id != null || f.company_id != null, { message: 'each fixture needs a person_id or a company_id' });
 
-// The autoresponder's whole request at reply time: a lead reference, nothing else.
-export const ReplyRequest = z.object({
-  sequencer: z.string().min(1),
-  sequencer_campaign_id: id,
-  sequencer_lead_id: id,
-  reply_id: id.nullish(),
-  idempotency_key: z.string().min(1).nullish(),
-});
+// The autoresponder's whole request at reply time: a lead reference, nothing else. The contract
+// names the fields campaign_id / lead_id; the older sequencer_campaign_id / sequencer_lead_id
+// names are still accepted.
+export const ReplyRequest = z.preprocess(
+  (v) => {
+    if (!v || typeof v !== 'object') return v;
+    const o = v as Record<string, unknown>;
+    return { ...o, sequencer_campaign_id: o.sequencer_campaign_id ?? o.campaign_id, sequencer_lead_id: o.sequencer_lead_id ?? o.lead_id };
+  },
+  z.object({
+    sequencer: z.string().min(1),
+    sequencer_campaign_id: id,
+    sequencer_lead_id: id,
+    reply_id: id.nullish(),
+    idempotency_key: z.string().min(1).nullish(),
+  }),
+);
+
+export function isLeadReference(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false;
+  const o = body as Record<string, unknown>;
+  return 'sequencer' in o && !('recipe' in o) && !('fixtures' in o);
+}
 
 export const BuildPayload = z
   .object({
@@ -107,6 +126,7 @@ export const BuildPayload = z
         description: z.string().default(''),
         hosting: z.enum(['ours', 'client_domain']).default('ours'),
         hosted_base_url: z.string().nullish(),
+        endpoint_path: z.string().nullish(),
         integration: Integration.nullish(),
       })
       .passthrough(),
@@ -121,17 +141,14 @@ export const BuildPayload = z
       })
       .passthrough()
       .nullish(),
+    // No client colours or logo (rulings 89-90): pages use the prospect's colours. The booking
+    // contact's name is shown in the window only, never on the page (ruling 100); when sent, it is
+    // used just to check it never reaches the page.
     client: z
       .object({
         client_id: id.nullish(),
         client_name: z.string().min(1),
         website: z.string().nullish(),
-        // hex colours, or {"default": true} = the operator chose the house default (ruling 54a)
-        brand_colors: z
-          .record(z.any())
-          .nullish()
-          .transform((v) => v ?? {}),
-        logo_url: z.string().nullish(),
         booking_url: z.string().nullish(),
         booking_poc_name: z.string().nullish(),
       })

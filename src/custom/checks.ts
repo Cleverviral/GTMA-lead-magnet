@@ -1,8 +1,8 @@
-// Mechanical checks for a custom page (design bundle v3). Booleans: true = pass, except the
+// Mechanical checks for a custom page (skills/design-custom-lead-magnet.md, rulings 38-45, 54-71, 88-102). Booleans: true = pass, except the
 // FLAG_CHECKS, which are flags (true = a fallback was used; GTMA surfaces it, the page is fine).
 import { countryName, esc, visibleText } from '../text.js';
 import type { Colors, CtaInfo, Fixture, LogoResult, PageContent, Payload, ResolvedInputs } from '../types.js';
-import { RELATED_TAG, TRANSPARENCY_TEXT, footerLine, type CarouselResult } from './render.js';
+import { CLOSING_BUTTON, RELATED_TAG, TRANSPARENCY_TEXT, footerLine, type CarouselResult } from './render.js';
 
 export { FLAG_CHECKS, isFlagged } from './flags.js';
 
@@ -46,6 +46,8 @@ export function placeholderHits(text: string): string[] {
 // Numbers formatted the same everywhere: no bare 1234 once separators, decimals and years are set aside.
 export function unformattedNumbers(text: string): string[] {
   const rest = text
+    // standard names are not counts: ISO 9001, ISO/IEC 27001, SOC 2
+    .replace(/\b(?:ISO(?:\/IEC)?|IEC|SOC|NIST(?: SP)?|EN|BS)[\s-]*\d[\d-]*\b/g, ' ')
     .replace(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g, ' ')
     .replace(/\d+\.\d+%?/g, ' ')
     .replace(/\b(?:19|20)\d\d\b/g, ' ');
@@ -126,21 +128,33 @@ export function runCustomChecks({ html, content, payload, fixture, resolved, log
   const footer = html.match(/<footer>([\s\S]*?)<\/footer>/)?.[1] ?? '';
   const hrefCount = html.split(`href="${esc(ctaInfo.href)}"`).length - 1;
   const hasLogoTile = html.includes('class="plogo');
+  const pos = (needle: string): number => html.indexOf(needle);
+  const order = [pos('class="tblock"'), carousel.cards.length ? pos('class="carousel"') : null, pos('class="cta"'), pos('<footer>')].filter(
+    (n): n is number => n !== null,
+  );
+  const poc = payload.client.booking_poc_name?.trim();
 
   const checks: Record<string, boolean> = {
     inputs_present: resolved.missingRequired.length === 0,
     no_placeholders: placeholders.length === 0,
     prospect_named: Boolean(companyName) && text.includes(companyName) && (!fixture.first_name || text.includes(fixture.first_name)),
     client_named: text.includes(payload.client.client_name),
-    client_brand_colors: html.includes(colors.accent),
-    default_palette_used: !colors.fromClient,
+    // ruling 89: the prospect's colour (or the ember default) is what the page is drawn in
+    prospect_brand_colors: html.includes(`--a:${colors.accent};`),
+    default_palette_used: !colors.fromProspect,
+    // ruling 90: never the client's logo; the only image is the prospect's logo tile
+    no_client_logo: (html.match(/<img\b/g) ?? []).length === (logo.ok ? 1 : 0),
     logo_gate_respected: logo.ok ? hasLogoTile : !hasLogoTile,
     no_em_dashes: !/[–—]/.test(text),
     cta_top_and_bottom: hrefCount >= 2 && (text.match(/Book a call/g) ?? []).length >= 2,
-    poc_named_in_cta: Boolean(ctaInfo.poc) && text.includes(`Book a call with ${ctaInfo.poc}`),
+    // ruling 100: the closing button is about the next step; the booking contact is never named
+    cta_about_next_step_not_a_person: text.includes(CLOSING_BUTTON) && (!poc || !text.includes(poc)),
     cta_fallback_used: ctaInfo.fallbackUsed,
     carousel_present: carousel.cards.length > 0,
     transparency_block: text.includes(TRANSPARENCY_TEXT),
+    // ruling 102: transparency line, then case studies, then "Book a call with us", then the footer
+    bottom_order: order.every((n) => n >= 0) && order.every((n, i) => i === 0 || order[i - 1]! < n),
+    closing_centred_bold: /\.tblock\{[^}]*text-align:center[^}]*font-weight:700/.test(html) && /footer\{[^}]*text-align:center;font-weight:700/.test(html),
     so_what_section: text.includes(`What ${companyName} could do with this`) && content.actions.length >= 2,
     action_names_a_buyer_team: content.actions.length > 0 && badActions.length === 0,
     one_line_footer: footer === esc(footerLine(payload.client, fixture, companyName)),
@@ -166,8 +180,7 @@ export function runCustomChecks({ html, content, payload, fixture, resolved, log
     if (relatedCos.length < 3) notes.push(`only ${relatedCos.length} related compan${relatedCos.length === 1 ? 'y' : 'ies'} could be found`);
   }
 
-  if (!colors.fromClient) notes.push('client has no brand colours (or chose the default): house default palette used');
-  if (!checks.poc_named_in_cta) notes.push('client.booking_poc_name missing; closing CTA has no contact name');
+  if (!checks.cta_about_next_step_not_a_person) notes.push('the booking contact is named on the page (ruling 100: never a person\'s name)');
   if (ctaInfo.fallbackUsed) notes.push('client.booking_url missing or invalid; CTA links to client.website');
   if (!checks.carousel_present) notes.push('no approved case studies and no client resources: carousel omitted');
   if (!logo.ok) notes.push(`no prospect logo (${logo.reason}); tile hidden`);

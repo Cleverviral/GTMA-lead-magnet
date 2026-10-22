@@ -2,7 +2,7 @@ import './net.js';
 import crypto from 'node:crypto';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { config } from './config.js';
-import { BuildPayload, ReplyRequest } from './contract.js';
+import { BuildPayload, isLeadReference, ReplyRequest } from './contract.js';
 import { ensureSchema, pageByToken, sql } from './db.js';
 import { runBuild } from './build.js';
 import { produceForReply } from './reply/produce.js';
@@ -70,13 +70,11 @@ app.setErrorHandler((err, req, reply) => {
   return reply.send({ error: 'internal_error', message: 'the request could not be completed' });
 });
 
-app.post('/magnet/build-previews', buildRoute('build-previews'));
-app.post('/magnet/produce', buildRoute('produce'));
-
 const REPLY_HTTP: Record<string, number> = { not_found: 404, ambiguous: 409, held: 409 };
 
-// Reply time: the autoresponder sends only {sequencer, sequencer_campaign_id, sequencer_lead_id}.
-app.post('/magnet/produce-for-reply', async (req: FastifyRequest, reply: FastifyReply) => {
+// Reply time: the autoresponder sends only a lead reference {sequencer, campaign_id, lead_id}
+// (+ reply_id). The generator reads everything else from Postgres itself.
+async function replyRoute(req: FastifyRequest, reply: FastifyReply) {
   if (!authorized(req.headers.authorization)) return reply.code(401).send({ error: 'unauthorized' });
   const parsed = ReplyRequest.safeParse(req.body);
   if (!parsed.success) {
@@ -84,17 +82,26 @@ app.post('/magnet/produce-for-reply', async (req: FastifyRequest, reply: Fastify
   }
   const res = await produceForReply(parsed.data);
   return reply.code(REPLY_HTTP[res.status] ?? 200).send(res);
-});
+}
+
+const legacyProduce = buildRoute('produce');
+
+app.post('/magnet/build-previews', buildRoute('build-previews'));
+// The contract's reply-time endpoint. A full single-fixture payload is still accepted (older callers).
+app.post('/magnet/produce', (req: FastifyRequest, reply: FastifyReply) => (isLeadReference(req.body) ? replyRoute(req, reply) : legacyProduce(req, reply)));
+// Same as /magnet/produce with a lead reference (kept for callers already wired to it).
+app.post('/magnet/produce-for-reply', replyRoute);
 
 app.get('/health', async () => {
   await sql`select 1`;
   return { ok: true };
 });
 
-// Hosted pages: {hosted_base_url}/{token}. Unguessable token, noindex, no scripts allowed.
+// Hosted pages: {hosted_base_url}/{company-slug}-{code} (ruling 88; older pages keep their
+// 22-character tokens). noindex, no scripts allowed.
 app.get('/:token', async (req: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
   const { token } = req.params;
-  const html = /^[A-Za-z0-9_-]{22}$/.test(token) ? await pageByToken(token) : null;
+  const html = /^[A-Za-z0-9_-]{3,64}$/.test(token) ? await pageByToken(token) : null;
   reply.header('X-Robots-Tag', 'noindex, nofollow').header('Referrer-Policy', 'no-referrer');
   if (!html) return reply.code(404).type('text/plain').send('Not found');
   return reply

@@ -1,15 +1,14 @@
-// The design shell for every custom page (design bundle v3, rulings 38-45 and 54-71). Layout and
-// CSS follow the reference build (magnet-service-tool-kit/related-companies-test/e2e_related.py).
-// Everything the rules fix (palette, logo tile, CTAs, company-card labels, "could do" heading,
-// carousel, transparency block, footer) is drawn here in code, never by the model.
+// The design shell for every custom page (skills/design-custom-lead-magnet.md, rulings 38-45,
+// 54-71, 88-90, 100, 102). Layout and CSS follow the reference build
+// (magnet-service-tool-kit/magnet-test/finders/e2e_related.py). Everything the rules fix (palette,
+// logo tile, CTAs, company-card labels, "could do" heading, transparency block, carousel, footer)
+// is drawn here in code, never by the model.
+import crypto from 'node:crypto';
 import { isHttpUrl } from '../contract.js';
 import { esc } from '../text.js';
 import type { Colors, ContentBlock, CtaInfo, Fixture, LogoResult, PageContent, Payload, RelatedCompany } from '../types.js';
 
-const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
-// Ruling 54b: the house default palette is EMBER ORANGE, used when the client chose
-// "no brand colours in mind" (stored as {"default": true}) or has none. Never a grey page.
+// Ruling 54b: the default palette is EMBER ORANGE, used when no prospect colour passes the gate.
 export const HOUSE_DEFAULT = {
   accent: '#ea580c',
   accent2: '#f97316',
@@ -22,6 +21,8 @@ export const HOUSE_DEFAULT = {
 
 // Ruling 65b: exactly this, nothing more.
 export const TRANSPARENCY_TEXT = 'This is auto-generated and reviewed by our team. Happy to dive deeper on our introduction call.';
+// Ruling 100: the closing button is about the next step, never a person's name.
+export const CLOSING_BUTTON = 'Book a call with us';
 
 export const RELATED_TAG: Record<RelatedCompany['found_by'], (rc: RelatedCompany) => string> = {
   case_study: () => 'From your case studies',
@@ -31,42 +32,36 @@ export const RELATED_TAG: Record<RelatedCompany['found_by'], (rc: RelatedCompany
 
 type ClientLike = Payload['client'];
 
-function tint(hex: string, amount = 0.9): string {
-  const h = hex.length === 4 ? hex.replace(/^#(.)(.)(.)$/, '#$1$1$2$2$3$3') : hex.slice(0, 7);
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-  const mix = (c: number) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, '0');
-  return `#${mix(r!)}${mix(g!)}${mix(b!)}`;
-}
-
-// Rule 1: palette = the CLIENT's brand_colors when it has a usable accent; otherwise the whole
-// house default (a half-client, half-default page would look broken).
-export function palette(brandColors: Record<string, unknown> = {}): Colors {
-  const pick = (k: string): string | null => {
-    const v = brandColors[k];
-    return typeof v === 'string' && HEX.test(v) ? v : null;
-  };
-  const accent = pick('accent') ?? pick('primary');
-  if (!accent || brandColors.default === true) return { fromClient: false, ...HOUSE_DEFAULT };
-  return {
-    fromClient: true,
-    accent,
-    accent2: pick('accent2') ?? pick('secondary') ?? accent,
-    tag: pick('tag') ?? tint(accent),
-    ink: pick('ink') ?? pick('text') ?? HOUSE_DEFAULT.ink,
-    mut: pick('mut') ?? pick('muted') ?? HOUSE_DEFAULT.mut,
-    line: pick('line') ?? pick('border') ?? HOUSE_DEFAULT.line,
-    bg: pick('bg') ?? pick('background') ?? HOUSE_DEFAULT.bg,
-  };
-}
-
-// Rule 3: booking link + POC from the card; missing -> client website and FLAG it. Never invent.
+// Rule 3: the booking link; missing -> the client website, FLAGGED. Never invent a link.
 export function cta(client: ClientLike): CtaInfo | null {
-  if (isHttpUrl(client.booking_url)) {
-    return { href: client.booking_url, poc: client.booking_poc_name?.trim() || null, fallbackUsed: false };
-  }
-  if (isHttpUrl(client.website)) return { href: client.website, poc: client.booking_poc_name?.trim() || null, fallbackUsed: true };
+  if (isHttpUrl(client.booking_url)) return { href: client.booking_url, fallbackUsed: false };
+  if (isHttpUrl(client.website)) return { href: client.website, fallbackUsed: true };
   return null;
 }
+
+// Ruling 88: every link = company name (legal suffix dropped) + a short random code,
+// e.g. /datassential-7k2q. Six characters keep it short but not guessable.
+const LEGAL_SUFFIX = /[,.]?\s+(inc|llc|ltd|limited|corp|corporation|co|gmbh|plc|sa|ag|bv|pvt)\.?$/i;
+const CODE_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
+export function shortCode(n = 6): string {
+  const bytes = crypto.randomBytes(n);
+  return [...bytes].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+export function companySlug(name: string): string {
+  let n = name.trim();
+  while (LEGAL_SUFFIX.test(n)) n = n.replace(LEGAL_SUFFIX, '');
+  const slug = n
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/['\u2019]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return slug || 'page';
+}
+export const pageToken = (companyName: string): string => `${companySlug(companyName)}-${shortCode()}`;
 
 // Numbers are formatted the same everywhere: 1,234.
 export const fmt = (n: number): string => n.toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -130,13 +125,13 @@ th{background:var(--bg);color:var(--mut);font-weight:600}
 .ccard{display:block;background:#fff;border:1px solid var(--line);border-top:4px solid var(--a);border-radius:10px;padding:14px 16px;text-decoration:none;color:inherit}
 .ccard h4{margin:0 0 4px;font-size:15px}
 .ccard p{margin:0;font-size:13px;color:var(--mut)}
-.tblock{display:flex;gap:12px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--a);border-radius:12px;padding:16px 18px;margin-top:26px;font-weight:600;font-size:15px}
+.tblock{display:flex;gap:10px;justify-content:center;align-items:center;text-align:center;background:#fff;border:1px solid var(--line);border-top:3px solid var(--a);border-radius:12px;padding:16px 18px;margin-top:26px;font-weight:700;font-size:15px}
 .tblock .ic{flex:none;width:22px;height:22px;border:2px solid var(--a);border-radius:50%;color:var(--a);display:grid;place-items:center;font-size:13px}
 .cta{background:var(--ink);color:#fff;border-radius:12px;padding:26px 24px;margin-top:26px;text-align:center}
 .cta h3{margin:0 0 6px;font-size:22px}
 .cta p{margin:0 0 14px;color:#cbd5e1;font-size:14px}
 .cta a{display:inline-block;background:var(--a);color:#fff;text-decoration:none;font-weight:700;padding:12px 26px;border-radius:999px}
-footer{color:var(--mut);font-size:12px;margin-top:28px}
+footer{color:var(--mut);font-size:12px;margin-top:28px;text-align:center;font-weight:700}
 @media(max-width:560px){.row{grid-template-columns:1fr;gap:2px}.lbl{text-align:left}h1{font-size:25px}
 .topname span{display:none}.plogo{width:40px;height:40px;border-radius:10px}.cta-btn{padding:8px 12px;font-size:13px}}
 `;
@@ -277,8 +272,6 @@ export function renderPage({ content, payload, fixture, logo, colors, ctaInfo }:
         .join('')}</div>`
     : '';
 
-  const closingLabel = ctaInfo.poc ? `Book a call with ${ctaInfo.poc}` : 'Book a call';
-
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
@@ -290,9 +283,9 @@ export function renderPage({ content, payload, fixture, logo, colors, ctaInfo }:
 <header><h1>${esc(content.headline)}</h1><p class="sub">${esc(content.subheadline)}</p></header>
 ${content.blocks.map((b) => renderBlock(b, related)).join('\n')}
 ${actionsHtml}
-${carouselHtml}
 <div class="tblock"><span class="ic">i</span><span>${esc(TRANSPARENCY_TEXT)}</span></div>
-<div class="cta"><h3>${esc(content.closing_heading)}</h3><p>${esc(content.closing_body)}</p><a href="${esc(ctaInfo.href)}" rel="noopener">${esc(closingLabel)} →</a></div>
+${carouselHtml}
+<div class="cta"><h3>${esc(content.closing_heading)}</h3><p>${esc(content.closing_body)}</p><a href="${esc(ctaInfo.href)}" rel="noopener">${CLOSING_BUTTON} →</a></div>
 <footer>${esc(footerLine(client, fixture, companyName))}</footer>
 </div></body></html>`;
   return { html, carousel };

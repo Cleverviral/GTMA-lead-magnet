@@ -17,7 +17,6 @@ const SEED_BY = 'TEST SEED (magnet_service)';
 const TEST_CARD = {
   booking_url: 'https://cal.com/datamagnet/15min',
   booking_poc_name: 'Mayank',
-  brand_colors: { accent: '#16a34a', accent2: '#22c55e', ink: '#111827', mut: '#64748b', line: '#e2e8f0', bg: '#f8fafc' },
 };
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sql = postgres(process.env.GTMA_DATABASE_URL!, { max: 1, onnotice: () => {} });
@@ -101,7 +100,7 @@ if (process.argv.includes('--undo')) {
                  and not exists (select 1 from lead_magnet_runtimes where lead_magnet_id = ${s.magnetId} and status = 'approved')`;
     console.log(`${s.magnetId}: removed ${rts.length} seeded runtime(s), ${prods.length} test production(s)`);
   }
-  const card = await sql`update client_sub_profiles set booking_url = null, booking_poc_name = null, brand_colors = null
+  const card = await sql`update client_sub_profiles set booking_url = null, booking_poc_name = null
                           where sub_profile_id = ${SUB_PROFILE_ID} and booking_url = ${TEST_CARD.booking_url}
                             and booking_poc_name = ${TEST_CARD.booking_poc_name} returning sub_profile_id`;
   console.log(card.length ? 'removed the TEST card values' : 'no card values to remove');
@@ -130,10 +129,9 @@ if (process.argv.includes('--undo')) {
     console.log(`${s.magnetId}: seeded approved runtime v${next}`);
   }
   const card = await sql`update client_sub_profiles
-                            set booking_url = ${TEST_CARD.booking_url}, booking_poc_name = ${TEST_CARD.booking_poc_name},
-                                brand_colors = ${sql.json(TEST_CARD.brand_colors)}
-                          where sub_profile_id = ${SUB_PROFILE_ID} and booking_url is null and booking_poc_name is null and brand_colors is null
+                            set booking_url = ${TEST_CARD.booking_url}, booking_poc_name = ${TEST_CARD.booking_poc_name}
+                          where sub_profile_id = ${SUB_PROFILE_ID} and booking_url is null and booking_poc_name is null
                           returning sub_profile_id`;
-  console.log(card.length ? 'filled the empty Data Magnet card with TEST booking link, POC and brand colours' : 'card already has values; left untouched');
+  console.log(card.length ? 'filled the empty Data Magnet card with TEST booking link and POC' : 'card already has values; left untouched');
 }
 await sql.end();

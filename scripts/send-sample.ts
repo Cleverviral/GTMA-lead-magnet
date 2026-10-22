@@ -5,10 +5,12 @@
 //   npm run sample -- --fixtures 2       only the first 2 fixtures (cheaper)
 //   npm run sample -- --produce          reply-time production for fixture 1 (produce)
 //   npm run sample -- --key abc          reuse an idempotency key (second run should return cached results)
-//   npm run sample -- --no-booking       drop booking_url/POC to exercise the CTA fallback flag
+//   npm run sample -- --no-booking       drop booking_url to exercise the CTA fallback flag
 //   npm run sample -- --missing-input    remove a required input from fixture 1 (it must fail)
-//   npm run sample -- --external         external magnet via the mock client tool (run npm run mock:tool first)
-//   npm run sample -- --external --bad-key   the client tool rejects the key: first 403 stops the whole set
+//   npm run sample -- --external         "Connect your own lead magnet" against the stand-in tool (npm run mock:tool first)
+//   npm run sample -- --external --bad-key   the tool refuses the key: the test call stops the whole set
+//   npm run sample -- --external --async     a job-id API: not supported, the test call stops the set
+//   npm run sample -- --external --oauth     an OAuth login: not supported, nothing is called
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -37,29 +39,35 @@ if (endpoint === 'produce') {
 }
 if (flag('--no-booking')) {
   payload.client.booking_url = null;
-  payload.client.booking_poc_name = null;
 }
-// External magnet against the local mock client tool (npm run mock:tool), per example-recipe-external-WIP.md.
+// "Connect your own lead magnet" against the stand-in tool (npm run mock:tool), shaped like the
+// kit's magnet-test/external/frozen-recipe.json: every request field is a data key, link from report_url.
 if (flag('--external')) {
-  payload.recipe.skill_md = fs.readFileSync(path.join(kit, 'example-recipe-external-WIP.md'), 'utf8');
-  payload.recipe.play_constants = { title_choice: 1 };
-  // what GTMA's frozen input_manifest holds: the data keys the topic template reads, plus the play constant
+  payload.recipe.skill_md = 'External magnet: Competitor benchmark report. The client tool makes the page; the generator calls it once per company.';
+  payload.recipe.play_constants = {};
   payload.recipe.input_manifest = [
-    { key: 'company_name', source: 'lead_list', required: true },
+    { key: 'company_domain', source: 'lead_list', required: true },
     { key: 'company_industry', source: 'lead_list', required: true },
-    { key: 'company_dept_distribution', source: 'lead_list', required: true },
-    { key: 'title_choice', source: 'play_constant', required: false, fallback: 1 },
+    { key: 'company_employee_count', source: 'lead_list', required: true },
   ];
-  payload.recipe.output_contract = { deliverable: 'html_link', pre_send_checks: ['url_resolves'], expected_turnaround_minutes: 1 };
+  payload.recipe.output_contract = {
+    deliverable: 'html_link', pre_send_checks: ['url_resolves'], expected_turnaround_minutes: 1,
+    method: 'POST', header: 'x-api-key', link_field: 'report_url',
+    request_mapping: [
+      { field: 'company_domain', data_key: 'company_domain' },
+      { field: 'industry', data_key: 'company_industry' },
+      { field: 'employee_count', data_key: 'company_employee_count' },
+    ],
+  };
   payload.magnet.kind = 'external';
-  payload.magnet.promise = ['A ready-to-publish draft press release about your team growth.'];
-  payload.magnet.description = 'A draft PR on the client newswire, written around the prospect\'s real headcount growth.';
+  payload.magnet.name = 'Competitor benchmark report';
+  payload.magnet.promise = ['A benchmark of you against your peers'];
+  payload.magnet.description = 'A one-page benchmark of their company, made by the client\'s own tool.';
   payload.magnet.integration = {
-    base_url: process.env.MOCK_TOOL_URL ?? 'http://localhost:9090',
-    auth_kind: 'api_key',
-    credential: flag('--bad-key') ? 'wrong-key' : 'mock-key',
-    endpoint_path: '/stories/marketing/draft',
-    test_mode: { available: false },
+    base_url: process.env.MOCK_TOOL_URL ?? 'http://localhost:8790',
+    auth_kind: flag('--oauth') ? 'oauth2' : 'api_key',
+    credential: flag('--bad-key') ? 'wrong-key' : (process.env.MOCK_TOOL_KEY ?? 'test-key-123'),
+    endpoint_path: flag('--async') ? '/v1/reports-async' : '/v1/reports',
   };
 }
 if (flag('--missing-input')) {
@@ -88,7 +96,7 @@ const names: Record<string, string> = Object.fromEntries(
 for (const r of result.results) {
   const failed = Object.entries(r.checks).filter(([k, v]) => isFlagged(k, v)).map(([k]) => k);
   const total = Object.keys(r.checks).length;
-  console.log(`${r.status === 'produced' ? 'OK  ' : 'FAIL'} ${names[r.person_id]}${r.cached ? '  (cached)' : ''}`);
+  console.log(`${r.status === 'produced' ? 'OK  ' : 'FAIL'} ${names[r.person_id ?? '']}${r.cached ? '  (cached)' : ''}`);
   console.log(`     url: ${r.url ?? '-'}   ${(r.latency_ms / 1000).toFixed(1)}s   checks ${total - failed.length}/${total}${failed.length ? '  flagged: ' + failed.join(', ') : ''}`);
   if (r.failure_reason) console.log(`     failure: ${r.failure_reason}`);
   for (const note of r.notes ?? []) console.log(`     note: ${note}`);

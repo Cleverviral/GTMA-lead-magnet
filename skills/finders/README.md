@@ -1,6 +1,8 @@
-# The two finders (ruling 64) — run by the generator when a magnet's inputs list the finder keys
+# The two finders (rulings 63a, 67a, 68a) — run by the generator when a magnet's inputs list the finder keys
 
-Goal: three companies that matter to the prospect. Never the prospect, never competitors.
+Goal: three companies that matter to the prospect, never the prospect itself. Order
+(ruling 68a): case-study customers → lookalikes of any brand found → target market only when
+no brand is found at all.
 
 ## Finder 1: company_case_study_customers (first)
 1. Read the prospect's homepage; follow links to customers / case studies / customer stories.
@@ -22,7 +24,6 @@ brand: same industry and country, closest in size. (Worldly: Lovesac → Patagon
 2. Turn it into a company search (industry + keywords + country). In production an LLM
    does this mapping; keep the evidence quote with the result.
 3. Take the largest companies, excluding the prospect.
-Used when finder 1 resolves fewer than 3 companies (it tops up the missing ones).
 
 ## Selection rules
 - Used only if at least 20% of its LinkedIn people list a known team (ruling 69); else skip
@@ -40,6 +41,6 @@ format every number the same way.
 ## Tested 2026-10-20 (magnet-test/finders/e2e_related.py)
 Datassential → finder 1: General Mills, Gallo, Griffith Foods (Brinker skipped, 5% coverage) (from their own case
 studies). Worldly → finder 1 found Lovesac, lookalikes added Patagonia, REI.
-DataStax, IPVM, Millennium → finder 2. 5 previews + 1 reply-time run: 21/21 checks each (brand and ember-orange default palettes).
+DataStax, IPVM, Millennium → finder 2. 5 previews + 1 reply-time run: 25/25 checks each (brand and ember-orange default palettes).
 Finding: real named customers were genuinely absent for 3 of 5 prospects (DataStax pages
 redirect to IBM; Millennium anonymises clients; IPVM shows only press logos).

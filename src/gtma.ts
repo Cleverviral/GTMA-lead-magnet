@@ -26,9 +26,8 @@ export interface LeadRow {
   sub_profile_name: string;
   product_website: string | null;
   booking_url: string | null;
+  // shown in the window only; read just to check it never reaches the page (ruling 100)
   booking_poc_name: string | null;
-  brand_colors: Record<string, string> | null;
-  logo_url: string | null;
 }
 
 export async function findLeads(campaignId: string, leadId: string): Promise<LeadRow[]> {
@@ -37,7 +36,7 @@ export async function findLeads(campaignId: string, leadId: string): Promise<Lea
            pll.client_id, pll.sub_profile_id, pll.gtm_play_id, g.gtm_play_name, g.gtm_play_summary,
            g.gtm_play_offer, g.lead_magnet_id,
            g.magnet_reply_guidance, sp.sequencer, sp.client_name, sp.sub_profile_name, sp.product_website,
-           sp.booking_url, sp.booking_poc_name, sp.brand_colors, sp.logo_url
+           sp.booking_url, sp.booking_poc_name
       from play_lead_lists pll
       join gtm_plays g on g.gtm_play_id = pll.gtm_play_id
       join client_sub_profiles sp on sp.sub_profile_id = pll.sub_profile_id
@@ -104,6 +103,8 @@ export async function findResources(clientId: string, subProfileId: string | nul
 export interface MagnetRow {
   lead_magnet_id: string;
   lead_magnet_name: string;
+  // the catalogue's promise version (lead_magnet_versions); the recipe version is current_runtime_version
+  current_version: number;
   magnet_kind: 'custom' | 'external';
   fulfillment_mode: string;
   status: string;
@@ -119,7 +120,7 @@ export interface MagnetRow {
 
 export async function findMagnet(id: string): Promise<MagnetRow | null> {
   const [row] = await gtma<MagnetRow[]>`
-    select lead_magnet_id, lead_magnet_name, magnet_kind, fulfillment_mode, status, description, promise,
+    select lead_magnet_id, lead_magnet_name, current_version, magnet_kind, fulfillment_mode, status, description, promise,
            hosting, hosted_base_url, integration_id, endpoint_path, runtime_status, current_runtime_version
       from lead_magnets where lead_magnet_id = ${id}`;
   return row ?? null;
@@ -155,9 +156,16 @@ export async function findProofpoints(subProfileId: string): Promise<{ kind: str
   return gtma`select kind, statement from proofpoints where sub_profile_id = ${subProfileId} and approved order by kind`;
 }
 
-export async function findIntegration(id: string): Promise<{ base_url: string; auth_kind: string; credential_ref: string | null; test_mode: Json | null } | null> {
-  const [row] = await gtma<{ base_url: string; auth_kind: string; credential_ref: string | null; test_mode: Json | null }[]>`
-    select base_url, auth_kind, credential_ref, test_mode from client_integrations where integration_id = ${id} and status = 'active'`;
+export interface IntegrationRow {
+  base_url: string;
+  auth_kind: string;
+  credential_ref: string | null;
+}
+
+// The key itself is never here: credential_ref points into the secret store (ruling 95).
+export async function findIntegration(id: string): Promise<IntegrationRow | null> {
+  const [row] = await gtma<IntegrationRow[]>`
+    select base_url, auth_kind, credential_ref from client_integrations where integration_id = ${id} and status = 'active'`;
   return row ?? null;
 }
 
@@ -231,14 +239,6 @@ export async function replyExists(replyId: string): Promise<boolean> {
   return Boolean(row);
 }
 
-export async function findInterestedReply(personId: string, playId: string): Promise<string | null> {
-  const [row] = await gtma<{ reply_id: string }[]>`
-    select reply_id::text from replies
-     where person_id = ${personId} and gtm_play_id = ${playId} and category = 'interested'
-     order by replied_at desc limit 1`;
-  return row?.reply_id ?? null;
-}
-
 export async function findProducedForReply(magnetId: string, personId: string, replyId: string): Promise<{ production_id: string; output: Json } | null> {
   const [row] = await gtma<{ production_id: string; output: Json }[]>`
     select production_id, output from magnet_productions
@@ -246,10 +246,30 @@ export async function findProducedForReply(magnetId: string, personId: string, r
   return row ?? null;
 }
 
+// Columns added by the v4 delta (ruling 115) may not be live yet: write them only when present.
+const columnCache = new Map<string, Promise<boolean>>();
+export function hasColumn(table: string, column: string): Promise<boolean> {
+  const k = `${table}.${column}`;
+  if (!columnCache.has(k)) {
+    columnCache.set(
+      k,
+      gtma<{ x: number }[]>`select 1 x from information_schema.columns where table_schema = 'public' and table_name = ${table} and column_name = ${column}`
+        .then((r) => r.length > 0)
+        .catch(() => {
+          columnCache.delete(k);
+          return false;
+        }),
+    );
+  }
+  return columnCache.get(k)!;
+}
+
 export interface ProductionLog {
   lead_magnet_id: string;
   lead_magnet_name: string;
   magnet_version: number;
+  // null only for a gate-bypass run (no approved recipe)
+  runtime_version: number | null;
   client_id: string;
   client_name: string;
   sub_profile_id: string;
@@ -258,32 +278,35 @@ export interface ProductionLog {
   gtm_play_name: string;
   person_id: string;
   company_id: string | null;
-  reply_id: string | null;
-  trigger: 'positive_reply' | 'manual';
+  reply_id: string;
   status: 'produced' | 'failed';
   inputs_used: Json;
   output: Json;
   failure_reason: string | null;
 }
 
-// The generator's only write to GTMA (ruling 52). A retry for the same reply updates its row.
+// The generator's only write to GTMA (rulings 52, 98): one positive_reply row per real reply run
+// (ruling 108). A retry for the same reply updates that row.
 export async function logProduction(p: ProductionLog): Promise<string> {
   const producedAt = p.status === 'produced' ? new Date() : null;
-  const [row] = await gtma<{ production_id: string }[]>`
-    insert into magnet_productions
-      (lead_magnet_id, lead_magnet_name, magnet_version, client_id, client_name, sub_profile_id, sub_profile_name,
-       gtm_play_id, gtm_play_name, person_id, company_id, reply_id, trigger, status, inputs_used, output,
-       produced_by, generator_version, produced_at, failure_reason)
-    values
-      (${p.lead_magnet_id}, ${p.lead_magnet_name}, ${p.magnet_version}, ${p.client_id}, ${p.client_name},
-       ${p.sub_profile_id}, ${p.sub_profile_name}, ${p.gtm_play_id}, ${p.gtm_play_name}, ${p.person_id},
-       ${p.company_id}, ${p.reply_id}, ${p.trigger}, ${p.status},
-       ${gtma.json(p.inputs_used as postgres.JSONValue)}, ${gtma.json(p.output as postgres.JSONValue)},
-       ${`runtime v${p.magnet_version}`}, ${config.generatorVersion}, ${producedAt}, ${p.failure_reason})
+  const withRuntime = await hasColumn('magnet_productions', 'runtime_version');
+  const row = {
+    lead_magnet_id: p.lead_magnet_id, lead_magnet_name: p.lead_magnet_name, magnet_version: p.magnet_version,
+    client_id: p.client_id, client_name: p.client_name, sub_profile_id: p.sub_profile_id, sub_profile_name: p.sub_profile_name,
+    gtm_play_id: p.gtm_play_id, gtm_play_name: p.gtm_play_name, person_id: p.person_id, company_id: p.company_id,
+    reply_id: p.reply_id, trigger: 'positive_reply', status: p.status,
+    inputs_used: gtma.json(p.inputs_used as postgres.JSONValue), output: gtma.json(p.output as postgres.JSONValue),
+    produced_by: p.runtime_version === null ? 'no approved runtime' : `runtime v${p.runtime_version}`, generator_version: config.generatorVersion, produced_at: producedAt,
+    failure_reason: p.failure_reason,
+    ...(withRuntime ? { runtime_version: p.runtime_version } : {}),
+  };
+  const [res] = await gtma<{ production_id: string }[]>`
+    insert into magnet_productions ${gtma(row)}
     on conflict (lead_magnet_id, person_id, reply_id) where reply_id is not null
     do update set status = excluded.status, inputs_used = excluded.inputs_used, output = excluded.output,
                   produced_by = excluded.produced_by, generator_version = excluded.generator_version,
                   produced_at = excluded.produced_at, failure_reason = excluded.failure_reason
+                  ${withRuntime ? gtma`, runtime_version = excluded.runtime_version` : gtma``}
     returning production_id`;
-  return row!.production_id;
+  return res!.production_id;
 }

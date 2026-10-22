@@ -1,151 +1,140 @@
-// External magnets (skills/render-external-lead-magnet.md, WIP): the CLIENT's tool builds the
-// deliverable through its API. The model compiles the recipe's request template for one fixture;
-// the service injects the credential (the model never sees it), pins the call to the integration's
-// host + endpoint, and reads the deliverable URL from the response (never constructs it).
-import { loadSkill, structured, S } from '../llm.js';
+// External magnets, "Connect your own lead magnet" (skills/render-external-lead-magnet.md,
+// rulings 72-86, 93, 95). The client's own tool makes the deliverable; we call its API once per
+// company and take the link from the link field. No model involved: every request field is a
+// GTMA data key value (no templates, no hand-typed values).
+//   Logins: API key in a header, bearer token, username and password. Anything else stops.
+//   Links only, in the same answer: text, files or job ids are not supported.
+//   Checks per call: call succeeded, link field present, link opens, right company named.
+// One call may create a real item in the client's tool: never a blind retry after a success.
 import { isHttpUrl } from '../contract.js';
-import type { ExternalCallResult, ExternalRequestSpec, Fixture, Payload, ResolvedInputs } from '../types.js';
+import { isPresent, lookup } from '../manifest.js';
+import { visibleText } from '../text.js';
+import type { ExternalCallResult, Fixture, Payload, ResolvedInputs } from '../types.js';
 
-const SCHEMA = S.obj({
-  missing_required_inputs: S.arr(S.str),
-  method: S.enm('GET', 'POST', 'PUT', 'PATCH'),
-  path: S.str,
-  query: S.arr(S.obj({ name: S.str, value: S.str })),
-  headers: S.arr(S.obj({ name: S.str, value: S.str })),
-  body_json: S.nstr,
-  auth_location: S.enm('header', 'query', 'bearer'),
-  auth_name: S.str,
-  test_mode_applied: S.bool,
-  response_url_field: S.str,
-  response_required_fields: S.arr(S.obj({ path: S.str, array_length: S.nint })),
-  url_suffix: S.nstr,
-});
+export const SUPPORTED_LOGINS = ['api_key', 'bearer', 'basic'] as const;
+const LINK_WAIT_MS = 60_000;
 
-const SYSTEM = `You compile ONE API request for an external lead magnet, for ONE prospect, by executing the recipe (recipe.skill_md).
-Return the request spec as JSON. The service sends it, injects the credential and reads the response.
-- method/path: exactly the endpoint the recipe names (path only, starting with "/", no host).
-- query/headers/body_json: built from the recipe's request template. body_json is the JSON body as a string, or null.
-  Every value must come from the prospect's real data, the resolved inputs or play_constants. Never invent data.
-- NEVER put a credential, API key or token placeholder anywhere. auth_location/auth_name say where the service injects it
-  (header name, query parameter name, or "bearer" for an Authorization Bearer header), per the recipe or integration.
-- Test mode: when "mode" is "preview" and the integration has a test mode, apply it exactly as the recipe or test_mode
-  describes and set test_mode_applied true. Otherwise false.
-- response_url_field: dot path of the response field holding the deliverable URL (e.g. "url" or "data.link").
-- response_required_fields: every field the recipe says the response must carry; array_length when it fixes a count.
-- url_suffix: anything the recipe appends to the returned URL (e.g. "?titleId=1"), or null.
-- If a REQUIRED input is missing, list its key in missing_required_inputs.
-- No em dashes or en dashes in any text value.
+export interface ExternalSpec {
+  baseUrl: string;
+  endpoint: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  authKind: (typeof SUPPORTED_LOGINS)[number];
+  header: string | null;
+  credential: string;
+  mapping: { field: string; data_key: string }[];
+  linkField: string;
+}
 
-=== CRAFT RULES (service skill bundle) ===
-${loadSkill('render-external-lead-magnet.md')}`;
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+// The connection and the frozen recipe's request settings. Returns a plain message when the setup
+// cannot be called (the same words the window shows).
+export function externalSpec(payload: Payload): ExternalSpec | { error: string } {
+  const integ = payload.magnet.integration;
+  if (!integ) return { error: 'external magnets need magnet.integration' };
+  const oc = payload.recipe.output_contract as Record<string, unknown>;
+  const pick = (...keys: string[]): unknown => {
+    for (const k of keys) {
+      const v = oc[k] ?? (integ as Record<string, unknown>)[k];
+      if (v !== undefined && v !== null && v !== '') return v;
+    }
+    return undefined;
+  };
+
+  const authKind = String(integ.auth_kind ?? '').toLowerCase();
+  if (!(SUPPORTED_LOGINS as readonly string[]).includes(authKind)) {
+    return { error: `This login method isn't supported yet (${authKind || 'none'}). Supported: API key, bearer token, username and password.` };
+  }
+  const endpoint = str(pick('endpoint_path', 'endpoint')) ?? str(payload.magnet.endpoint_path);
+  if (!endpoint || !endpoint.startsWith('/')) return { error: 'the endpoint path is missing from the setup' };
+  const method = (str(pick('method')) ?? 'POST').toUpperCase();
+  if (!['GET', 'POST', 'PUT', 'PATCH'].includes(method)) return { error: `unsupported request method ${method}` };
+  const header = str(pick('header', 'header_name', 'auth_header'));
+  if (authKind === 'api_key' && !header) return { error: 'the API key header name is missing from the setup' };
+  const parsed = (pick('request_mapping') as { field?: unknown; data_key?: unknown }[] | undefined) ?? [];
+  const mapping = parsed.filter((m) => str(m?.field) && str(m?.data_key)).map((m) => ({ field: String(m.field), data_key: String(m.data_key) }));
+  if (!mapping.length) return { error: 'the request mapping is missing: every field the API needs must map to a data key' };
+  const linkField = str(pick('link_field'));
+  if (!linkField) return { error: 'the link field is missing from the setup' };
+  if (authKind === 'basic' && !integ.credential.includes(':')) return { error: 'username and password logins need the credential as username:password' };
+
+  return { baseUrl: integ.base_url, endpoint, method: method as ExternalSpec['method'], authKind: authKind as ExternalSpec['authKind'], header, credential: integ.credential, mapping, linkField };
+}
 
 const pathGet = (obj: unknown, p: string): unknown =>
   p.split('.').filter(Boolean).reduce<unknown>((o, k) => (o == null ? undefined : (o as Record<string, unknown>)[k]), obj);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const scrub = (s: unknown, secret: string): string => String(s ?? '').split(secret).join('[redacted]').slice(0, 300);
 
-function scrub(s: unknown, secret: string): string {
-  return String(s ?? '').split(secret).join('[redacted]').slice(0, 300);
-}
-
-async function resolves(url: string): Promise<boolean> {
+async function openLink(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10_000) });
-    await res.body?.cancel();
-    return res.status < 400;
+    const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(20_000) });
+    if (res.status >= 400) {
+      await res.body?.cancel();
+      return null;
+    }
+    return visibleText(await res.text());
   } catch {
-    return false;
+    return null;
   }
 }
 
-export interface CompileRequestArgs {
-  payload: Payload;
-  fixture: Fixture;
-  resolved: ResolvedInputs;
-  mode: 'preview' | 'production';
+// The request body (or query) for one company: each API field filled from its data key.
+export function requestValues(spec: Pick<ExternalSpec, 'mapping'>, fixture: Fixture, resolved: ResolvedInputs, playConstants: Record<string, unknown>) {
+  const body: Record<string, unknown> = {};
+  const missing: string[] = [];
+  for (const m of spec.mapping) {
+    const v = isPresent(resolved.values[m.data_key]) ? resolved.values[m.data_key] : lookup(m.data_key, fixture, playConstants);
+    if (isPresent(v)) body[m.field] = v;
+    else missing.push(m.field);
+  }
+  return { body, missing };
 }
 
-export async function compileRequest({ payload, fixture, resolved, mode }: CompileRequestArgs): Promise<ExternalRequestSpec> {
-  const { recipe, magnet } = payload;
-  const { credential, ...integration } = magnet.integration!;
-  void credential;
-  const user = [
-    '# Recipe (recipe.skill_md)', recipe.skill_md, '',
-    '# Mode', mode, '',
-    '# Integration (credential withheld)', JSON.stringify(integration), '',
-    '# Play constants', JSON.stringify(recipe.play_constants ?? {}), '',
-    '# Prospect', JSON.stringify({ first_name: fixture.first_name, full_name: fixture.full_name, company: fixture.company }), '',
-    '# Resolved inputs', JSON.stringify(resolved.values), '',
-    '# All raw inputs', JSON.stringify(fixture.inputs ?? {}),
-  ].join('\n');
-  return structured<ExternalRequestSpec>({ system: SYSTEM, user, name: 'external_request', schema: SCHEMA });
+export interface CallArgs {
+  spec: ExternalSpec;
+  body: Record<string, unknown>;
+  company: { name: string; domain: string | null };
+  retries: number;
 }
 
-export interface CallExternalArgs {
-  payload: Payload;
-  spec: ExternalRequestSpec;
-  mode: 'preview' | 'production';
-}
-
-// Returns { status, url, checks, notes, failure_reason, artifactMayExist, authFailed }.
-export async function callExternal({ payload, spec, mode }: CallExternalArgs): Promise<ExternalCallResult> {
-  const integ = payload.magnet.integration!;
-  const secret = integ.credential;
-  const retries = payload.recipe.failure_policy?.retries ?? 2;
+export async function callExternal({ spec, body, company, retries }: CallArgs): Promise<ExternalCallResult> {
+  const secret = spec.credential;
   const notes: string[] = [];
   const fail = (reason: string, extra: Partial<ExternalCallResult> = {}): ExternalCallResult => ({
-    status: 'failed',
-    url: null,
-    checks: {},
-    notes,
-    failure_reason: scrub(reason, secret),
-    artifactMayExist: false,
-    authFailed: false,
-    ...extra,
+    status: 'failed', url: null, checks: {}, notes, failure_reason: scrub(reason, secret), artifactMayExist: false, authFailed: false, setWide: false, ...extra,
   });
 
-  if (integ.endpoint_path && spec.path !== integ.endpoint_path) {
-    return fail(`recipe request path ${spec.path} does not match integration endpoint_path ${integ.endpoint_path}`);
-  }
-  const base = new URL(integ.base_url);
-  const target = new URL(spec.path.replace(/^\/*/, '/'), base);
-  if (target.origin !== base.origin) return fail('request path escapes the integration base_url');
+  const base = new URL(spec.baseUrl);
+  const target = new URL(spec.endpoint.replace(/^\/*/, '/'), base);
+  if (target.origin !== base.origin) return fail('the endpoint path escapes the tool\'s base address', { setWide: true });
 
   const headers: Record<string, string> = { Accept: 'application/json' };
-  const forbidden = new Set(['authorization', 'cookie', 'host', (integ.auth_header ?? spec.auth_name ?? '').toLowerCase()]);
-  for (const h of spec.headers) if (!forbidden.has(h.name.toLowerCase())) headers[h.name] = h.value;
-  for (const q of spec.query) if (q.name !== spec.auth_name) target.searchParams.set(q.name, q.value);
+  if (spec.authKind === 'api_key') headers[spec.header!] = secret;
+  else if (spec.authKind === 'bearer') headers.Authorization = `Bearer ${secret}`;
+  else headers.Authorization = `Basic ${Buffer.from(secret).toString('base64')}`;
 
-  if (integ.auth_kind === 'bearer' || spec.auth_location === 'bearer') headers.Authorization = `Bearer ${secret}`;
-  else if (integ.auth_header) headers[integ.auth_header] = secret;
-  else if (spec.auth_location === 'query') target.searchParams.set(spec.auth_name, secret);
-  else headers[spec.auth_name] = secret;
-
-  let body: string | undefined;
-  if (spec.body_json !== null && spec.method !== 'GET') {
-    try {
-      body = JSON.stringify(JSON.parse(spec.body_json));
-    } catch {
-      return fail('compiled body_json is not valid JSON');
-    }
+  let payloadBody: string | undefined;
+  if (spec.method === 'GET') for (const [k, v] of Object.entries(body)) target.searchParams.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+  else {
+    payloadBody = JSON.stringify(body);
     headers['Content-Type'] = 'application/json';
   }
-  if (mode === 'preview' && integ.test_mode?.available && !spec.test_mode_applied) {
-    notes.push('integration has a test mode but the recipe compile did not apply it');
-  }
 
-  // Error policy: 400 = fix the body (no retry) · 401/403 = stop, key problem · 408/429/5xx = backoff retry.
-  // A timeout may still have created the artifact, so it is never retried. Never retry after a 200.
+  // 408/429/5xx before any success: back off and retry. A timeout may already have made the item
+  // in the client's tool, so it is never retried.
+  const t0 = Date.now();
   let res: Response;
   for (let attempt = 0; ; attempt++) {
     try {
-      res = await fetch(target, { method: spec.method, headers, body, signal: AbortSignal.timeout(60_000) });
+      res = await fetch(target, { method: spec.method, headers, body: payloadBody, signal: AbortSignal.timeout(LINK_WAIT_MS) });
     } catch (e) {
-      if (e instanceof Error && e.name === 'TimeoutError') return fail('client API timed out; an artifact may exist, not retried', { artifactMayExist: true });
+      if (e instanceof Error && e.name === 'TimeoutError') return fail('the tool did not answer within a minute; an item may exist there, not retried', { artifactMayExist: true });
       if (attempt < retries) {
         await sleep(1000 * 3 ** attempt);
         continue;
       }
-      return fail(`client API unreachable: ${e instanceof Error ? e.message : String(e)}`);
+      return fail(`the tool is unreachable: ${e instanceof Error ? e.message : String(e)}`);
     }
     if (([408, 429].includes(res.status) || res.status >= 500) && attempt < retries) {
       await res.body?.cancel();
@@ -154,37 +143,35 @@ export async function callExternal({ payload, spec, mode }: CallExternalArgs): P
     }
     break;
   }
-
+  const seconds = (Date.now() - t0) / 1000;
   const text = await res.text();
   if (res.status === 401 || res.status === 403) {
-    return fail(`client API rejected the credential (HTTP ${res.status}); stop and surface to the operator`, { authFailed: true });
+    return fail(`The API key was refused by the tool (HTTP ${res.status}). Check the key saved in Settings.`, { authFailed: true, setWide: true });
   }
-  if (!res.ok) return fail(`client API HTTP ${res.status}: ${text}`);
+  if (res.status === 202) return fail('the tool answered later with a job id; only links returned in the same answer are supported', { artifactMayExist: true, setWide: true });
+  if (!res.ok) return fail(`the tool answered HTTP ${res.status}: ${text}`);
 
-  // From here on a real artifact may exist on the client's tool.
+  // From here on a real item may exist in the client's tool.
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
-    return fail(`client API returned non-JSON (HTTP ${res.status})`, { artifactMayExist: true });
+    return fail('the tool answered with text, not a link; only links are supported', { artifactMayExist: true, setWide: true });
   }
-  const missing = spec.response_required_fields.filter((f) => {
-    const v = pathGet(json, f.path);
-    if (v === undefined || v === null || v === '') return true;
-    return f.array_length !== null && (!Array.isArray(v) || v.length !== f.array_length);
-  });
-  const rawUrl = pathGet(json, spec.response_url_field);
-  const url = isHttpUrl(rawUrl) ? rawUrl + (spec.url_suffix ?? '') : null;
+  const raw = pathGet(json, spec.linkField);
+  const url = isHttpUrl(raw) ? raw : null;
+  const page = url ? await openLink(url) : null;
+  const lower = (page ?? '').toLowerCase();
+  const named = Boolean(page) && [company.domain, company.name].some((v) => v && lower.includes(v.toLowerCase()));
   const checks: Record<string, boolean> = {
-    http_status_ok: true,
-    response_shape_ok: missing.length === 0,
-    url_present: Boolean(url),
-    url_from_api: true,
-    test_mode_applied: mode !== 'preview' || !integ.test_mode?.available || spec.test_mode_applied,
-    url_resolves: url ? await resolves(url) : false,
+    call_succeeded: true,
+    link_field_present: Boolean(url),
+    link_opens: page !== null,
+    right_company_named: named,
+    same_answer_under_60s: seconds < 60,
   };
-  if (missing.length) notes.push(`response missing: ${missing.map((f) => f.path).join(', ')}`);
-  if (!url) return { ...fail(`no deliverable URL at response field "${spec.response_url_field}"`, { artifactMayExist: true }), checks };
-  if (!checks.url_resolves) return { ...fail('deliverable URL does not resolve', { artifactMayExist: true }), url, checks };
-  return { status: 'produced', url, checks, notes, failure_reason: null, artifactMayExist: true, authFailed: false };
+  if (!url) return { ...fail(`no link in the answer at "${spec.linkField}"; only links returned in the same answer are supported`, { artifactMayExist: true, setWide: true }), checks };
+  if (!checks.link_opens) return { ...fail('the link the tool returned does not open', { artifactMayExist: true }), url, checks };
+  if (!named) return { ...fail(`the page the tool made does not name ${company.name}`, { artifactMayExist: true }), url, checks };
+  return { status: 'produced', url, checks, notes, failure_reason: null, artifactMayExist: true, authFailed: false, setWide: false };
 }

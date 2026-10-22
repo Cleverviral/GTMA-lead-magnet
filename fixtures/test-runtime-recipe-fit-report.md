@@ -28,7 +28,7 @@ play_constants: none
    a fact that was not obtained.
 5. Carousel fallback claims when no proofpoints are approved (source: datamagnet.co): "Real-time, not cached" ·
    "75+ fields per profile" · "Trusted by data-driven teams".
-6. Closing CTA: invite a 15 minute call with the booking contact to scope which feeds fit their stack.
+6. Closing CTA: invite a 15 minute call with us to scope which feeds fit their stack.
 
 ## Output contract
 deliverable: html_link · pre_send_checks: url_resolves, no_placeholders · expected_turnaround_minutes: 10

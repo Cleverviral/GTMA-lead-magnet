@@ -26,7 +26,7 @@ play_constants: none
    description): time outreach when a buyer team adds people at a company it serves; spot expansion before it is
    announced; prioritise accounts by where their teams sit. Each names the team that buys what the prospect sells.
 6. Carousel: approved case studies, else Data Magnet's own resources.
-7. Closing CTA: "Want these signals live, for every company you serve?" / "Grab 15 minutes with <booking contact> at
+7. Closing CTA: "Want these signals live, for every company you serve?" / "Grab 15 minutes with us at
    DataMagnet to set them up as a feed."
 
 ## Output contract

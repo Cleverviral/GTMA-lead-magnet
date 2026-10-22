@@ -33,7 +33,7 @@ play_constants: none
    "Real-time, not cached: profiles are fetched live at request time." · "75+ fields per profile: structured JSON on
    people and companies, headcount and department splits included." · "Trusted by data-driven teams: data providers,
    GTM and recruiting teams run refresh and trigger workflows on DataMagnet."
-10. Closing CTA: invite a 15 minute call with the booking contact to wire these signals into their refresh or trigger workflow.
+10. Closing CTA: invite a 15 minute call with us to wire these signals into their refresh or trigger workflow.
 
 ## Output contract
 deliverable: html_link · pre_send_checks: url_resolves, no_placeholders · expected_turnaround_minutes: 10

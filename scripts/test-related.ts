@@ -1,8 +1,8 @@
 // Live test of a related-companies magnet (rulings 63-71) through build-previews: the 5 real
 // Data Magnet fixture leads, the "Hiring Signals at the Companies You Work With" recipe, and the
 // service's own finders. Compare with magnet-service-tool-kit/related-companies-test/e2e-previews-report.json.
-//   npm run test:related               client palette
-//   npm run test:related -- --default  house default palette (no brand colours)
+//   npm run test:related                   all 5 leads, each page in the prospect's own colours
+//   npm run test:related -- --fixtures 2   the first 2 only
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -32,12 +32,11 @@ payload.magnet.promise = ['A map of hiring at three companies you work with, and
 payload.magnet.description = 'Team-by-team headcount at three companies that matter to the prospect, and the one team to watch at each.';
 payload.magnet.hosted_base_url = null;
 payload.client.client_id = 'd420c1e6-ef6d-446a-aa10-6feeee877684'; // Data Magnet: for its do-not-contact list
-if (args.includes('--default')) payload.client.brand_colors = { default: true };
 for (const f of payload.fixtures) f.inputs = {};
 const n = Number(args[args.indexOf('--fixtures') + 1]) || payload.fixtures.length;
 payload.fixtures = payload.fixtures.slice(0, n);
 
-console.log(`POST ${base}/magnet/build-previews  related-companies magnet, ${payload.fixtures.length} real leads${args.includes('--default') ? ', house default palette' : ''}`);
+console.log(`POST ${base}/magnet/build-previews  related-companies magnet, ${payload.fixtures.length} real leads`);
 const t0 = Date.now();
 const res = await fetch(`${base}/magnet/build-previews`, {
   method: 'POST',
@@ -55,7 +54,7 @@ const names = Object.fromEntries(payload.fixtures.map((f: { person_id: string; f
 for (const r of body.results) {
   const flagged = Object.entries(r.checks).filter(([k, v]) => isFlagged(k, v)).map(([k]) => k);
   const total = Object.keys(r.checks).length;
-  console.log(`${r.status === 'produced' ? 'OK  ' : 'FAIL'} ${names[r.person_id]}   ${(r.latency_ms / 1000).toFixed(1)}s   checks ${total - flagged.length}/${total}${flagged.length ? '  flagged: ' + flagged.join(', ') : ''}`);
+  console.log(`${r.status === 'produced' ? 'OK  ' : 'FAIL'} ${names[r.person_id ?? '']}   ${(r.latency_ms / 1000).toFixed(1)}s   checks ${total - flagged.length}/${total}${flagged.length ? '  flagged: ' + flagged.join(', ') : ''}`);
   if (r.related) console.log(`     ${r.related.basis}: ${r.related.companies.map((c) => `${c.name} (${c.found_by}${c.like ? ' of ' + c.like : ''})`).join(', ')}`);
   console.log(`     url: ${r.url ?? '-'}`);
   if (r.failure_reason) console.log(`     failure: ${r.failure_reason}`);

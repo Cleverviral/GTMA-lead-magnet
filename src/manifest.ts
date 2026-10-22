@@ -43,15 +43,20 @@ export function parseManifestTable(skillMd: string): ManifestEntry[] | null {
   return rows.length ? rows : null;
 }
 
-const ALIASES: Record<string, [string | null, string]> = {
-  company_domain: ['company', 'primary_domain'],
-  company_primary_domain: ['company', 'primary_domain'],
-  company_name: ['company', 'company_name'],
-  company_industry: ['company', 'industry'],
-  company_employee_count: ['company', 'employee_count'],
-  company_employees_on_linkedin: ['company', 'employee_count'],
-  person_full_name: [null, 'full_name'],
-  person_first_name: [null, 'first_name'],
+// Where a manifest key sits on the fixture when GTMA did not put it in `inputs`. The company block
+// uses the companies table's names (employees_on_linkedin), older payloads employee_count.
+const ALIASES: Record<string, [string | null, string][]> = {
+  company_domain: [['company', 'primary_domain']],
+  company_primary_domain: [['company', 'primary_domain']],
+  company_name: [['company', 'company_name']],
+  company_industry: [['company', 'industry']],
+  company_employee_count: [['company', 'employees_on_linkedin'], ['company', 'employee_count']],
+  company_employees_on_linkedin: [['company', 'employees_on_linkedin'], ['company', 'employee_count']],
+  company_hq_country: [['company', 'hq_country']],
+  company_hq_city: [['company', 'hq_city']],
+  company_about: [['company', 'about']],
+  person_full_name: [[null, 'full_name']],
+  person_first_name: [[null, 'first_name']],
 };
 
 export function isPresent(v: unknown): boolean {
@@ -68,8 +73,9 @@ export function lookup(key: string, fixture: Fixture, playConstants: Record<stri
   const company = fixture.company as Record<string, unknown>;
   const fixtureRecord = fixture as unknown as Record<string, unknown>;
   const candidates: unknown[] = [inputs?.[key], playConstants?.[key]];
-  const alias = ALIASES[key];
-  if (alias) candidates.push(alias[0] ? (fixtureRecord[alias[0]] as Record<string, unknown> | undefined)?.[alias[1]] : fixtureRecord[alias[1]]);
+  for (const [scope, field] of ALIASES[key] ?? []) {
+    candidates.push(scope ? (fixtureRecord[scope] as Record<string, unknown> | undefined)?.[field] : fixtureRecord[field]);
+  }
   if (key.startsWith('company_')) candidates.push(company?.[key.slice('company_'.length)]);
   if (key.startsWith('person_')) candidates.push(fixtureRecord[key.slice('person_'.length)]);
   return candidates.find(isPresent);

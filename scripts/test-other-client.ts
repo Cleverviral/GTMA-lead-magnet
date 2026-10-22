@@ -24,10 +24,7 @@ const companies: { company_id: string; company_name: string; primary_domain: str
 const CLIENT = {
   client_name: 'SocialHP',
   website: 'https://www.socialhp.com/',
-  brand_colors: {},
-  logo_url: null,
   booking_url: null,
-  booking_poc_name: null,
 };
 const PROOFPOINTS = [
   { kind: 'brand_name', statement: 'Turbonomic' },
@@ -60,7 +57,7 @@ const payload = {
   client: CLIENT,
   proofpoints: PROOFPOINTS,
   fixtures: companies.map((c) => ({
-    person_id: c.person_id, lead_list_id: c.company_id, reply_id: null,
+    person_id: c.person_id, company_id: c.company_id,
     first_name: c.full_name.split(' ')[0], full_name: c.full_name,
     company: { company_name: c.company_name, primary_domain: c.primary_domain, industry: c.industry, employee_count: c.employees_on_linkedin, hq_city: c.hq_city, hq_country: c.hq_country, about: c.about },
     inputs: { company_website: `https://${c.primary_domain}`, company_linkedin_url: `https://www.linkedin.com/company/${c.company_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` },
@@ -68,7 +65,7 @@ const payload = {
 };
 
 console.log(`=== SocialHP · Dormant Reach Audit · ${companies.length} real (borrowed) companies ===`);
-console.log('client brand_colors: (empty, real current state)  booking_url: (none, real current state)  proofpoints: 4 real approved rows\n');
+console.log('booking_url: (none, real current state)  proofpoints: 4 real approved rows  colours: each prospect\'s own\n');
 const t0 = Date.now();
 const res = await fetch(`${base}/magnet/build-previews`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.SERVICE_API_KEY}` }, body: JSON.stringify(payload),

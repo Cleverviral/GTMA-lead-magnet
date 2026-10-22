@@ -19,7 +19,9 @@ export interface ResolvedInputs {
 }
 
 export interface Colors {
-  fromClient: boolean;
+  // true = the prospect's own brand colour passed the gate (ruling 89); false = ember default
+  fromProspect: boolean;
+  source: string;
   accent: string;
   accent2: string;
   tag: string;
@@ -33,7 +35,6 @@ export type RelatedCompany = NonNullable<Fixture['related_companies']>[number];
 
 export interface CtaInfo {
   href: string;
-  poc: string | null;
   fallbackUsed: boolean;
 }
 
@@ -73,21 +74,6 @@ export interface PageContent {
   closing_body: string;
 }
 
-export interface ExternalRequestSpec {
-  missing_required_inputs: string[];
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH';
-  path: string;
-  query: { name: string; value: string }[];
-  headers: { name: string; value: string }[];
-  body_json: string | null;
-  auth_location: 'header' | 'query' | 'bearer';
-  auth_name: string;
-  test_mode_applied: boolean;
-  response_url_field: string;
-  response_required_fields: { path: string; array_length: number | null }[];
-  url_suffix: string | null;
-}
-
 export interface ExternalCallResult {
   status: 'produced' | 'failed';
   url: string | null;
@@ -96,10 +82,14 @@ export interface ExternalCallResult {
   failure_reason: string | null;
   artifactMayExist: boolean;
   authFailed: boolean;
+  // the failure is about the setup, not this company (login refused, no link field, job id, text
+  // answer): when the test call fails this way the rest of the set is skipped
+  setWide: boolean;
 }
 
 export interface FixtureResult {
-  person_id: string;
+  person_id: string | null;
+  company_id: string | null;
   lead_list_id: string | null;
   status: 'produced' | 'failed';
   url: string | null;
@@ -107,7 +97,11 @@ export interface FixtureResult {
   checks: Record<string, boolean>;
   failure_reason: string | null;
   notes: string[];
+  // the values the page or the client API call was made from (GTMA keeps them in test_report)
+  values_used?: Record<string, unknown>;
   cached?: boolean;
+  // external setups: the first call of the set is the test call; if it fails, the rest are skipped
+  test_call?: boolean;
   // external only: the client tool answered 2xx, so a real artifact may exist there (never re-POST blindly)
   artifact_may_exist?: boolean;
   // related-companies magnets: which companies the page shows and how they were found

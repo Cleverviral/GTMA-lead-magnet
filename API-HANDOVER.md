@@ -1,35 +1,48 @@
 # Lead Magnet Service — API Handover
 
-2026-10-14 ·
+2026-10-22 · matches contract v5 (`magnet-service-tool-kit/docs/magnet-service-contract.md`)
 
-The Lead Magnet render service is live at `https://gtma-lead-magnet.onrender.com`, with two
-endpoints: build previews before approval, and produce a magnet live when a prospect replies
-positively. Both are tested end to end against real data.
+The Lead Magnet service is live at `https://gtma-lead-magnet.onrender.com`. GTMA calls it to
+generate previews in the Lead Magnet window, and the autoresponder calls it when a prospect replies
+positively. Same two endpoints as before; what they accept and return changed as listed below.
 
 ## Authentication
 
-Every request to either endpoint needs one header:
+Every request needs:
 
 ```
 Authorization: Bearer <SERVICE_API_KEY>
 Content-Type: application/json
 ```
 
-No key, or the wrong one, returns `401 Unauthorized` and nothing else happens. The key will be
-shared with you separately, over a private channel.
+A missing or wrong key returns `401` and nothing runs. The key is shared separately, over a
+private channel.
 
-## Endpoint 1 — building and approving a magnet
+## Endpoint 1: generate previews (GTMA → service)
 
 ```
 POST /magnet/build-previews
 ```
 
-Called by GTMA's window during the build/test loop, before a magnet is approved. GTMA sends one
-self-contained payload (the recipe, the client's brand, up to 10 fixture leads with values already
-resolved); this service builds and hosts that many pages and returns the links. No database lookup
-happens on this path — it's a pure function of the payload.
+Called by the "Generate previews" step. GTMA sends the draft recipe, the client's booking link,
+proofpoints, and 5 preview people (custom) or 5 companies (external). The service builds and
+hosts the 5 pages (or calls the client's tool 5 times) and returns the links with their checks.
+GTMA saves the results in the recipe's `test_report`. Previews are never written to
+`magnet_productions`.
 
-**Response** (200, synchronous):
+What changed in v5:
+
+| Field | Now |
+|---|---|
+| `fixtures[]` | identified by `person_id` + `company_id`; no `lead_list_id` (nobody is claimed for a preview). External previews may send companies only (`company_id`, no person) |
+| `fixtures[].inputs` | only the values already on the list. The service fetches the rest itself (shared enrichment cache first, then the data key's tool), the same way as at reply time |
+| `fixtures[].company` | `employees_on_linkedin` (the old `employee_count` still works) |
+| `client` | `client_name`, `website`, `booking_url`. No colours, no logo: pages use each prospect's own colours. `booking_poc_name` is never shown on the page; leave it out |
+| `gtm_play_id` | optional (the window works without a play) |
+| `resources` | optional. If GTMA sends no proofpoints and no resources, the service reads the client's own assets itself |
+| `magnet.hosting` | `ours` (the shared neutral domain) or `client_domain` with the verified subdomain in `hosted_base_url` |
+
+**Response** (200, synchronous; about 20 to 30 seconds for 5 custom pages):
 
 ```json
 {
@@ -39,86 +52,109 @@ happens on this path — it's a pure function of the payload.
   "results": [
     {
       "person_id": "...",
+      "company_id": "...",
       "status": "produced",
-      "url": "https://gtma-lead-magnet.onrender.com/<token>",
-      "checks": { "client_brand_colors": true, "carousel_present": true },
-      "latency_ms": 13400,
-      "failure_reason": null
+      "url": "https://gtma-lead-magnet.onrender.com/datassential-wfrzvp",
+      "latency_ms": 25000,
+      "checks": { "prospect_brand_colors": true, "bottom_order": true, "carousel_present": true },
+      "values_used": { "company_domain": "datassential.com" },
+      "failure_reason": null,
+      "notes": ["colour #00a380 from the prospect's logo"]
     }
   ]
 }
 ```
 
-Full payload shape: `magnet-service-tool-kit/magnet-service-contract.md` in the repo.
+Links are now the company name plus a short random code (`/datassential-wfrzvp`). Older links keep
+working.
 
-Optional fields added in kit v3:
+Checks: every check is pass-when-true, except `default_palette_used` (true = no prospect colour
+passed, ember orange used) and `cta_fallback_used` (true = no booking link, the button goes to the
+client's website). Both are flags for the window; the page is fine.
 
-| Field | What it's for |
-|---|---|
-| `client.client_id` | the client's id; needed for related-companies magnets (do-not-contact list) |
-| `client.brand_colors` | may be `{"default": true}`; the page then uses the house palette |
-| `resources` | `[{title, description, url}]` from the client's `assets`; the carousel when there are no case studies |
-| `play` | `{name, summary, offer, reply_guidance}`; looked up from `gtm_play_id` when left out |
-| `fixtures[].related_companies` | send this only if GTMA picks the related companies itself; otherwise the service finds them |
+### External magnets ("Connect your own lead magnet")
 
-For related-companies magnets, the service reads GTMA's database (read-only) during previews too.
-
-## Endpoint 2 — a positive reply
-
-```
-POST /magnet/produce-for-reply
-```
-
-Called by the autoresponder when a reply is categorized `interested` on a play that carries a
-magnet. The request is just a lead reference — this service does the rest itself (database lookup,
-live enrichment, build, QA):
+Same endpoint, `magnet.kind = "external"`. Send the connection in `magnet.integration` and the
+frozen settings in `recipe.output_contract` (where GTMA stores them):
 
 ```json
-{
-  "sequencer": "email_bison",
-  "sequencer_campaign_id": "107",
-  "sequencer_lead_id": "103430",
-  "reply_id": "42"
+"magnet": {
+  "kind": "external",
+  "integration": { "base_url": "https://api.client.com", "auth_kind": "api_key",
+                   "credential": "<the key, for these calls only>", "endpoint_path": "/v1/reports" }
+},
+"recipe": {
+  "output_contract": {
+    "method": "POST", "header": "x-api-key", "link_field": "report_url",
+    "request_mapping": [ { "field": "company_domain", "data_key": "company_domain" },
+                         { "field": "industry", "data_key": "company_industry" } ]
+  }
 }
 ```
 
-`reply_id` is optional but recommended — send it if you have it. It's what makes a retry of the
-same reply return the same cached link instead of rebuilding. Without it, this service looks for an
-`interested` reply itself, or logs the run as a one-off manual production if none exists yet.
+- Logins: `api_key` (needs `header`), `bearer`, `basic` (credential as `username:password`).
+  Anything else returns "This login method isn't supported yet" and nothing is called.
+- One call per company. The first call is the test call: if the key is refused, or the tool
+  answers with a job id, text, or no link, the other 4 are skipped with that reason.
+- Checks per call: `call_succeeded`, `link_field_present`, `link_opens`, `right_company_named`,
+  `same_answer_under_60s`.
+
+## Endpoint 2: a positive reply (autoresponder → service)
+
+```
+POST /magnet/produce
+```
+
+(`/magnet/produce-for-reply` still works and does the same thing.)
+
+The request is a lead reference only. The service walks the lookup chain itself, builds the page
+(or calls the client's tool), runs the frozen QA prompt, and writes one `magnet_productions` row.
+
+```json
+{ "sequencer": "email_bison", "campaign_id": "107", "lead_id": "103430", "reply_id": "42" }
+```
+
+The older `sequencer_campaign_id` / `sequencer_lead_id` names are accepted too.
+
+**`reply_id` is required for now.** The database refuses a reply run without its reply, and linking
+a run to its reply is on hold (ruling 105). Without a real `reply_id` the service answers `held`
+and builds nothing. This is the open question for the autoresponder: is the reply row saved
+before the autoresponder calls us, or only after it has replied?
 
 **Response:**
 
 ```json
 {
   "status": "produced",
-  "link": "https://gtma-lead-magnet.onrender.com/<token>",
+  "link": "https://gtma-lead-magnet.onrender.com/datassential-wfrzvp",
   "qa_notes": "one or two sentences for drafting the reply",
   "production_id": "...",
   "lead_magnet_id": "...",
-  "omitted_inputs": ["company_funding_rounds"],
+  "omitted_inputs": [],
   "failure_reason": null,
-  "attempts": 1,
-  "cached": false
+  "attempts": 1
 }
 ```
 
-**Branch on `status`:**
-
 | `status` | HTTP | Meaning | What to do |
 |---|---|---|---|
-| `produced` | 200 | A link is ready | Draft the reply with `link`; use `qa_notes` to know what's covered or left out |
-| `no_magnet` | 200 | This play has no magnet attached | Draft the reply normally, no magnet |
-| `standard_asset` | 200 | A pre-existing fixed link, nothing was built | Use the magnet's stored asset link directly |
-| `failed` | 200 | Tried, couldn't produce something that passed QA | Hold the reply — no link exists yet. Retry later or escalate |
-| `held` | 409 | Something's misconfigured upstream (e.g. a live play with no approved runtime) | Alert a human — the launch gate was bypassed |
-| `not_found` | 404 | That `(sequencer_campaign_id, sequencer_lead_id)` matches no lead | Check the reference is correct |
-| `ambiguous` | 409 | More than one lead matched | Shouldn't happen; include `sequencer` to disambiguate |
+| `produced` | 200 | A link is ready | Send the reply with `link`; `qa_notes` says what the page covers |
+| `no_magnet` | 200 | The play has no magnet | Reply normally |
+| `standard_asset` | 200 | A fixed asset, nothing was built | Use the stored asset link |
+| `failed` | 200 | Retries used up, nothing passed QA | Hold the reply; the run is logged and the developer is flagged |
+| `held` | 409 | No `reply_id`, an unknown `reply_id`, or a live play whose magnet has no approved recipe | Hold the reply and alert a human |
+| `not_found` | 404 | No lead matches that campaign + lead id | Check the reference |
+| `ambiguous` | 409 | More than one lead matched | Include the right `sequencer` |
 
-## Timing and retries
+A repeat call for the same reply returns the same link. Give the call a 120-second timeout; a
+timeout on your side does not cancel the build.
 
-A produced page usually takes 15–30 seconds. A failing one that retries twice (the default policy)
-can take up to about 90 seconds before the final answer comes back. Give the call at least a
-120-second timeout — a timeout on your side does not cancel the build, so a retry with the same
-`reply_id` will return the result once it's ready rather than starting over.
+## Database notes (for the developer)
 
-
+- The service reads GTMA's database and writes only `magnet_productions` (one row per reply run,
+  `trigger = 'positive_reply'`).
+- It works before and after `gtma-v4-delta-lead-magnets.sql`: it no longer reads the client
+  colour, logo or test-mode columns, and it fills `magnet_productions.runtime_version` once that
+  column exists.
+- External keys are read from the secret store through `client_integrations.credential_ref` (today:
+  the env var it names, set on the Render service).

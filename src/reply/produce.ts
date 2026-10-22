@@ -71,47 +71,53 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
   if (!magnet) return outcome('held', { failure_reason: 'the play points at a lead magnet that does not exist' });
   const base = { lead_magnet_id: magnet.lead_magnet_id };
   if (magnet.fulfillment_mode === 'standard_asset') return outcome('standard_asset', base);
+  // The run row must carry its reply (the database refuses a reply run without one). Linking a run
+  // to its reply is on hold (rulings 105, 110) with no stopgap, so the reply id comes only from the
+  // caller, and must be a real row (it is a foreign key). Without one nothing is built or logged.
+  if (!req.reply_id) {
+    return outcome('held', { ...base, failure_reason: 'reply_id is required: a reply run can only be logged against its reply (ruling 105 is on hold)' });
+  }
+  if (!(await g.replyExists(req.reply_id))) {
+    return outcome('held', { ...base, failure_reason: `reply_id ${req.reply_id} does not exist in replies` });
+  }
+  const replyId = req.reply_id;
+
+  // The magnet's CURRENT approved recipe (a new version in testing never serves live plays).
   const runtime =
     magnet.status === 'approved' && magnet.current_runtime_version
       ? await g.findApprovedRuntime(magnet.lead_magnet_id, magnet.current_runtime_version)
       : null;
-  if (!runtime) {
-    return outcome('held', { ...base, failure_reason: 'launch gate bypass: the play is live with no approved runtime for its magnet' });
-  }
-
-  // One production per (magnet, person, reply): a repeat call for the same reply returns the same link.
-  // A caller-supplied reply_id must be a real row (it's a DB foreign key) or the one write this
-  // service makes would crash; fall back to our own lookup rather than trust the caller blindly.
-  let replyId = req.reply_id && (await g.replyExists(req.reply_id)) ? req.reply_id : null;
-  let badReplyId: string | null = null;
-  if (req.reply_id && !replyId) badReplyId = req.reply_id;
-  replyId ??= await g.findInterestedReply(lead.person_id, lead.gtm_play_id);
-  if (replyId) {
-    const done = await g.findProducedForReply(magnet.lead_magnet_id, lead.person_id, replyId);
-    if (done) {
-      const out = done.output as { url?: string; qa?: { notes?: string }; omitted_inputs?: string[] };
-      return outcome('produced', {
-        ...base, link: out.url ?? null, qa_notes: out.qa?.notes ?? null, production_id: done.production_id,
-        omitted_inputs: out.omitted_inputs ?? [], cached: true,
-      });
-    }
-  }
 
   const log = (status: 'produced' | 'failed', inputs: InputResolution | null, output: Record<string, unknown>, failure: string | null) =>
     g.logProduction({
-      lead_magnet_id: magnet.lead_magnet_id, lead_magnet_name: magnet.lead_magnet_name, magnet_version: runtime.version,
+      lead_magnet_id: magnet.lead_magnet_id, lead_magnet_name: magnet.lead_magnet_name,
+      magnet_version: magnet.current_version, runtime_version: runtime?.version ?? null,
       client_id: lead.client_id, client_name: lead.client_name, sub_profile_id: lead.sub_profile_id,
       sub_profile_name: lead.sub_profile_name, gtm_play_id: lead.gtm_play_id, gtm_play_name: lead.gtm_play_name,
-      person_id: lead.person_id, company_id: lead.company_id, reply_id: replyId,
-      trigger: replyId ? 'positive_reply' : 'manual', status,
+      person_id: lead.person_id, company_id: lead.company_id, reply_id: replyId, status,
       inputs_used: inputs ? { values: inputs.values, sources: inputs.sources, unavailable: inputs.unavailable } : {},
-      output: {
-        ...output,
-        ...(replyId ? {} : { note: 'no interested reply row found for this lead; logged as manual' }),
-        ...(badReplyId ? { note: `caller-supplied reply_id ${badReplyId} does not exist in replies; ignored` } : {}),
-      },
+      output,
       failure_reason: failure,
     });
+
+  // A live play with a magnet and no approved recipe means the launch gate was bypassed: log it as
+  // a failed run so the developer is flagged, and never improvise a deliverable. The reply waits.
+  if (!runtime) {
+    const reason = 'launch gate bypass: the play is live with no approved runtime for its magnet';
+    const production_id = await log('failed', null, {}, reason);
+    return outcome('held', { ...base, production_id, failure_reason: reason });
+  }
+
+  // One production per (magnet, person, reply): a repeat call for the same reply returns the same link.
+  const prior = await g.findProducedForReply(magnet.lead_magnet_id, lead.person_id, replyId);
+  if (prior) {
+    const out = prior.output as { url?: string; qa?: { notes?: string }; omitted_inputs?: string[] };
+    return outcome('produced', {
+      ...base, link: out.url ?? null, qa_notes: out.qa?.notes ?? null, production_id: prior.production_id,
+      omitted_inputs: out.omitted_inputs ?? [], cached: true,
+    });
+  }
+
   const failed = async (reason: string, inputs: InputResolution | null, output: Record<string, unknown> = {}, attempts?: number) => {
     const production_id = await log('failed', inputs, output, reason);
     return outcome('failed', {
@@ -135,13 +141,15 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
   }
 
   // B4: assemble the same payload shape GTMA sends for previews, and build with the shared builder.
+  // External: the key is read from the secret store through credential_ref (ruling 95); the
+  // request mapping, method, header and link field come with the frozen recipe's output_contract.
   let integration: Payload['magnet']['integration'] = null;
   if (magnet.magnet_kind === 'external') {
     const integ = magnet.integration_id ? await g.findIntegration(magnet.integration_id) : null;
-    const credential = resolveCredential(integ?.credential_ref);
     if (!integ) return failed('external magnet has no active client integration', inputs);
-    if (!credential) return failed(`credential ${integ.credential_ref ?? '(none)'} is not configured on the generator`, inputs);
-    integration = { base_url: integ.base_url, auth_kind: integ.auth_kind, credential, endpoint_path: magnet.endpoint_path, test_mode: (integ.test_mode as never) ?? null };
+    const credential = resolveCredential(integ.credential_ref);
+    if (!credential) return failed(`the key for this tool (${integ.credential_ref ?? 'no pointer saved'}) is not in the secret store`, inputs);
+    integration = { base_url: integ.base_url, auth_kind: integ.auth_kind, credential, endpoint_path: magnet.endpoint_path };
   }
 
   const unavailable = inputs.unavailable.map((u) => u.key);
@@ -164,24 +172,24 @@ async function run(req: ReplyRequestBody): Promise<ReplyResponse> {
       },
       magnet: {
         kind: magnet.magnet_kind, name: magnet.lead_magnet_name, promise: magnet.promise ?? [], description: magnet.description ?? '',
-        hosting: magnet.hosting, hosted_base_url: magnet.hosted_base_url, integration,
+        hosting: magnet.hosting, hosted_base_url: magnet.hosted_base_url, endpoint_path: magnet.endpoint_path, integration,
       },
       play: {
         name: lead.gtm_play_name, summary: lead.gtm_play_summary, offer: lead.gtm_play_offer, reply_guidance: lead.magnet_reply_guidance,
       },
       client: {
-        client_id: lead.client_id, client_name: lead.client_name, website: lead.product_website, brand_colors: lead.brand_colors ?? {},
-        logo_url: lead.logo_url, booking_url: lead.booking_url, booking_poc_name: lead.booking_poc_name,
+        client_id: lead.client_id, client_name: lead.client_name, website: lead.product_website,
+        booking_url: lead.booking_url, booking_poc_name: lead.booking_poc_name,
       },
       proofpoints: await g.findProofpoints(lead.sub_profile_id),
       resources: await g.findResources(lead.client_id, lead.sub_profile_id),
       fixtures: [{
-        person_id: lead.person_id, lead_list_id: lead.lead_list_id, reply_id: replyId,
+        person_id: lead.person_id, company_id: lead.company_id, lead_list_id: lead.lead_list_id, reply_id: replyId,
         first_name: (person?.first_name as string | null) ?? (person?.full_name as string | null)?.split(' ')[0] ?? null,
         full_name: (person?.full_name as string | null) ?? null,
         company: {
           company_name: company?.company_name, primary_domain: company?.primary_domain, industry: company?.industry,
-          employee_count: company?.employees_on_linkedin, hq_city: company?.hq_city, hq_country: company?.hq_country, about: company?.about,
+          employees_on_linkedin: company?.employees_on_linkedin, hq_city: company?.hq_city, hq_country: company?.hq_country, about: company?.about,
         },
         inputs: inputs.values,
         unavailable_inputs: unavailable,

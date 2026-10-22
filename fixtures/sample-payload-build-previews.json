@@ -29,23 +29,12 @@
  "client": {
   "client_name": "Data Magnet",
   "website": "https://www.datamagnet.co/",
-  "brand_colors": {
-   "accent": "#16a34a",
-   "accent2": "#22c55e",
-   "ink": "#111827",
-   "mut": "#64748b",
-   "line": "#e2e8f0",
-   "bg": "#f8fafc"
-  },
-  "logo_url": null,
-  "booking_url": "https://cal.com/datamagnet/15min",
-  "booking_poc_name": "Mayank"
+  "booking_url": "https://cal.com/datamagnet/15min"
  },
  "proofpoints": [],
  "fixtures": [
   {
    "person_id": "622ca757-176c-4be9-ae9c-ec411bc04a0e",
-   "lead_list_id": "70",
    "reply_id": null,
    "first_name": "Ryan",
    "full_name": "Ryan J.",
@@ -264,11 +253,11 @@
      ],
      "total_employees": 277
     }
-   }
+   },
+   "company_id": "0620ba72-f86e-448f-8359-bb7aa1a9881f"
   },
   {
    "person_id": "9d62d61c-3b36-44fd-8620-b1917ce96323",
-   "lead_list_id": "113",
    "reply_id": null,
    "first_name": "Lindsay",
    "full_name": "Lindsay Warne",
@@ -462,11 +451,11 @@
      ],
      "total_employees": 148
     }
-   }
+   },
+   "company_id": "14a0eee7-9065-4911-906d-b87d287c56ff"
   },
   {
    "person_id": "94ba4ae3-4733-4288-9a80-d2c24ba562bf",
-   "lead_list_id": "28",
    "reply_id": null,
    "first_name": "Jonquil",
    "full_name": "Jonquil Moore",
@@ -620,11 +609,11 @@
      ],
      "total_employees": 189
     }
-   }
+   },
+   "company_id": "20bd763a-efca-46bb-aae1-bb68e7be15c8"
   },
   {
    "person_id": "da1d1c42-8236-434d-846b-87808d24560e",
-   "lead_list_id": "86",
    "reply_id": null,
    "first_name": "John",
    "full_name": "John Honovich",
@@ -763,11 +752,11 @@
      ],
      "total_employees": 29
     }
-   }
+   },
+   "company_id": "20838bc2-cd74-42ea-8b94-61c50d629d1a"
   },
   {
    "person_id": "b963dd7e-1c90-40ff-afc8-2c1e1869868a",
-   "lead_list_id": "122",
    "reply_id": null,
    "first_name": "Angie",
    "full_name": "Angie Hersheway",
@@ -891,7 +880,8 @@
      ],
      "total_employees": 102
     }
-   }
+   },
+   "company_id": "18d8716a-57b6-40e5-a00a-c57103251060"
   }
  ],
  "resources": [

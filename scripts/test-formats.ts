@@ -18,8 +18,7 @@ const companies: {
 
 const CLIENT = {
   client_name: 'Data Magnet', website: 'https://www.datamagnet.co/',
-  brand_colors: { accent: '#16a34a', accent2: '#22c55e', ink: '#111827', mut: '#64748b', line: '#e2e8f0', bg: '#f8fafc' },
-  logo_url: null, booking_url: 'https://cal.com/datamagnet/15min', booking_poc_name: 'Mayank',
+  booking_url: 'https://cal.com/datamagnet/15min',
 };
 
 interface FormatDef { name: string; magnetId: string; recipeFile: string; manifest: { key: string; source: string; required: boolean }[]; promise: string[]; description: string }
@@ -76,7 +75,7 @@ for (const fmt of FORMATS) {
     client: CLIENT,
     proofpoints: [],
     fixtures: companies.map((c) => ({
-      person_id: c.person_id, lead_list_id: c.company_id, reply_id: null,
+      person_id: c.person_id, company_id: c.company_id,
       first_name: c.full_name.split(' ')[0], full_name: c.full_name,
       company: { company_name: c.company_name, primary_domain: c.primary_domain, industry: c.industry, employee_count: c.employees_on_linkedin, hq_city: c.hq_city, hq_country: c.hq_country, about: c.about },
       inputs: {},
